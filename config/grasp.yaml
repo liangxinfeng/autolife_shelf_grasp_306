@@ -1,0 +1,65 @@
+robot_id: 306
+arm: left
+python: /home/ubuntu/miniconda3/envs/robot_env/bin/python
+vendor_python_path: /home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages
+urdf_path: /home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/urdfs/robot_v2_2.urdf
+calibration: /home/ubuntu/ros2_ws/src/autolife_handeye_calibration_306/sessions/20260915_135708_706046/session.json
+yolo_weights: /home/ubuntu/ros2_ws/src/adaptive_object_grasping/models/yolo/yolo11n-seg.pt
+dino_repo: models/dinov2
+dino_weights: models/dinov2_vits14_pretrain.pth
+generic_weights: models/FastSAM-s.pt
+device: cuda:0
+image_size: 640
+confidence: 0.30
+# Preferred YOLO food/container/bag masks; FastSAM supplies class-agnostic proposals.
+classes: [24, 26, 39, 40, 41, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55]
+recognition_hz: 3.0
+match_threshold: 0.72
+match_margin: 0.06
+depth_scale_m: 0.001
+depth_range_m: [0.20, 1.8]
+head_offsets_deg: [0.0, 0.0, 0.0]
+tcp_offset_mm: 15.0
+# Link_Waist_Yaw_to_Shoulder_Inner: +Y is toward robot's RIGHT shoulder.
+# Previous +30mm plus user's additional -15mm = final +15mm to robot right.
+# Independent of head/camera/wrist orientation and the 15mm marker->TCP offset.
+target_offset_torso_mm: [0.0, 15.0, 0.0]
+# Mechanical tool orientation: tool X approaches; tool Y closes horizontally; Z up.
+T_wrist_tool_quat_xyzw: [-0.70710678, 0.0, 0.0, 0.70710678]
+approach_yaw_deg: 0.0
+orientation_relax_deg: 30.0
+pregrasp_m: 0.12
+lift_m: 0.035
+withdraw_m: 0.20
+# No support plane is estimated. Up is computed from current URDF kinematics.
+gripper_max_width_m: 0.095
+gripper_open_deg: 10.0
+gripper_open_tolerance_deg: 4.0
+gripper_closed_deg: 330.0
+# Same initial joints as handeye306's VR-derived reset; both jaws fully open.
+# Waist/legs stay at their measured pose. This is not a vendor full-body HOME.
+initial_pose_deg:
+  left_arm: [0.0, 0.0, 0.0, 110.0, 0.0, 13.0, 0.0]
+  right_arm: [0.0, 0.0, 0.0, -110.0, 0.0, -13.0, 0.0]
+  neck: [0.0, -20.0, 0.0]
+require_reset_before_grasp: true
+reset_hardware_enabled: true
+reset_joint_speed_deg_s: 70.2
+reset_joint_acceleration_deg_s2: 585.0
+reset_feedback_lead_deg: 5.0
+reset_tolerance_deg: 1.0
+gripper_speed_scale: 0.5
+max_joint_speed_deg_s: 120.0
+max_joint_acceleration_deg_s2: 720.0
+grasp_feedback_lead_deg: 3.0
+# Reuse guarded VR position SYNC for grasp only; reset retains its current path.
+use_position_sync_session: true
+plan_ttl_sec: 20.0
+# No automatic hardware enable on startup. These remain false until measured.
+hardware_execution: true
+# User-authorized supervised experiment, NOT a claim of calibration acceptance.
+supervised_experiment: true
+camera_tcp_validated: false
+gripper_mapping_validated: false
+tool_orientation_validated: false
+external_scene_validated: false

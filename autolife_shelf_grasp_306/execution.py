@@ -1,0 +1,255 @@
+"""Experimental, explicitly gated executor; never launched by perception.
+
+Reuses hardware ownership/hold protection. Stable closure automatically starts
+the checked carry path, but is NOT proof that an object was securely grasped.
+"""
+import argparse
+import json
+import time
+import uuid
+from pathlib import Path
+import numpy as np
+import rclpy
+from autolife_handeye_calibration_306.bridge import competing_controller
+from .bridge import GraspBridge as CalibrationBridge
+from autolife_handeye_calibration_306.core import ARMS,BODY,NECK
+from autolife_handeye_calibration_306.verification_trajectory import JointPath
+from control_center_joint_control.joint_definitions import GROUPS
+from .core import execution_blockers,reset_blockers,atomic_json,open_tolerance,check_plan_identity
+from .motion import Follower,Arrival,GoalSender,configure_grasp_path,configure_reset_path,transit_pose_ok
+from .sync_session import PositionSyncSession
+from .joint_limits import validate_grasp_plan,check_pose
+
+
+def hold_groups(node,groups):
+    """Cancel this executor's pending goals and hold fresh measured positions."""
+    if not node._hardware_ready:return
+    q=node.snapshot();payload={}
+    for group in groups:
+        node._active_goals.pop(group,None);node._goal_sent_groups.discard(group)
+        node.progress_watch.pop(group,None)
+        if group!='grippers':
+            payload[GROUPS[group]['command_key']]=[q[n] for n,*_ in GROUPS[group]['joints']]
+    if payload:node._publish_vendor(node._whole_body_pub,payload)
+    if 'grippers' in groups:
+        node._publish_vendor(node._gripper_pub,{'left_gripper_target_joints_position':[q['Joint_Left_Gripper']],
+                                              'right_gripper_target_joints_position':[q['Joint_Right_Gripper']]})
+
+
+def main():
+    parser=argparse.ArgumentParser();parser.add_argument('--plan',required=True);parser.add_argument('--run',required=True)
+    parser.add_argument('--expected-plan-id');parser.add_argument('--expected-product-id')
+    args=parser.parse_args();run=Path(args.run);node=None;session=None;record={'status':'not_started'};preparing=False
+    try:
+        plan=json.loads(Path(args.plan).read_text('utf-8'));cfg=plan['config']
+        preparing=plan.get('kind')=='prepare'
+        if not preparing:check_plan_identity(plan,run.name,args.expected_plan_id,args.expected_product_id)
+        receipt_path=run/'prepare_result.json'
+        if preparing:atomic_json(receipt_path,{'status':'preparing'})
+        elif cfg.get('require_reset_before_grasp',True):
+            receipt=json.loads(receipt_path.read_text('utf-8')) if receipt_path.exists() else {}
+            if receipt.get('status')!='prepared' or not plan.get('prepare_token') or receipt.get('token')!=plan['prepare_token']:
+                raise ValueError('每轮抓取前请先复位并准备，再重新识别规划')
+        blockers=reset_blockers(cfg) if preparing else execution_blockers(cfg)
+        if blockers:raise ValueError('；'.join(blockers))
+        if time.monotonic()-plan['created_monotonic']>cfg['plan_ttl_sec']:raise ValueError('规划已过期，请重新规划')
+        if competing_controller():raise ValueError(competing_controller())
+        if not plan.get('self_collision_checked'):raise ValueError('缺少路径检查')
+        if not preparing:
+            up=np.asarray(plan.get('up_torso',[]),float)
+            if plan.get('geometry_version')!=2 or up.shape!=(3,) or not np.isfinite(up).all() or abs(np.linalg.norm(up)-1)>.001:
+                raise ValueError('旧版或无效抓取路径，请重新规划')
+        from autolife_handeye_calibration_306.core import digest
+        if digest(cfg['urdf_path'])!=plan['urdf_sha256']:raise ValueError('机器人模型已改变')
+        if not preparing and (digest(cfg['calibration'])!=plan.get('calibration_sha256') or
+                              plan.get('tcp_offset_mm')!=cfg['tcp_offset_mm']):
+            raise ValueError('标定/TCP来源改变或路径版本过旧，请重新规划')
+        # Reject stale plans BEFORE creating a bridge, unlocking or entering SYNC.
+        limit_policy=None
+        if not preparing:
+            limits={n:(lo,hi) for n,_,lo,hi in GROUPS[cfg['arm']+'_arm']['joints']}
+            limit_policy=validate_grasp_plan(plan,ARMS[cfg['arm']],limits)
+        tolerance=float(cfg.get('reset_tolerance_deg',1.)) if preparing else .3
+        ros_args=['--ros-args','-p','robot_id:=306','-p',f'goal_tolerance_deg:={tolerance}',
+                  '-p','command_update_rate_hz:=60.0',
+                  '-p',f'max_single_step_deg:={5. if preparing else 3.}',
+                  '-p','max_gripper_command_lead_deg:=30.0']
+        for name in ['joint_states','target_joint_states','status','preview_command','apply_command','action_command',
+                     'set_hardware_enabled','set_hardware_enabled_without_reset','set_leg_waist_enabled']:
+            ros_args+=['-r',f'/control_center_joint_control/{name}:=/shelf_grasp306/{name}']
+        rclpy.init(args=ros_args);node=CalibrationBridge();source=plan['source_q']
+        names=ARMS['left']+ARMS['right']+NECK if preparing else ARMS['left']
+        def spin():
+            for _ in range(10):rclpy.spin_once(node,timeout_sec=0)
+            if (run/'stop').exists():raise ValueError('用户停止')
+            heartbeat=run/'heartbeat'
+            if not heartbeat.exists() or time.time()-heartbeat.stat().st_mtime>1.:raise ValueError('界面心跳中断')
+            if session is not None:session.tick()
+            time.sleep(.005)
+        deadline=time.monotonic()+3
+        while not node._is_feedback_fresh():
+            spin()
+            if time.monotonic()>deadline:raise ValueError('关节反馈未就绪')
+        q=node.snapshot()
+        if max(abs(q[n]-source[n]) for n in source)>.5:raise ValueError('机器人姿态已改变，请重新规划')
+        response=node.unlock()
+        if not response.success:raise ValueError(response.message)
+        deadline=time.monotonic()+35
+        while not node._hardware_ready:
+            spin()
+            if time.monotonic()>deadline:raise ValueError('保持式使能超时')
+        q=node.snapshot()
+        if max(abs(q[n]-source[n]) for n in source)>.5:raise ValueError('使能期间姿态改变，请重新规划')
+        if not preparing and cfg.get('use_position_sync_session',True):
+            session=PositionSyncSession(node);session.enter(spin)
+            q=node.snapshot()
+            if max(abs(q[n]-source[n]) for n in source)>.5:raise ValueError('SYNC切换期间姿态改变，请重新规划')
+            print('保持式位置SYNC已就绪；仍按预检轨迹和3°反馈领先执行。',flush=True)
+        # A reset has no visual target. Source-pose and URDF checks above remain
+        # mandatory; a slow hold-only enable must not expire its checked path.
+        if not preparing and time.monotonic()-plan['created_monotonic']>cfg['plan_ttl_sec']:raise ValueError('使能后规划过期，请重新规划')
+        def checked():
+            spin();q=node.snapshot()
+            if not node._hardware_ready:raise ValueError('控制权/硬件状态失效：'+getattr(node,'last_lock_reason','请检查驱动状态'))
+            fixed=BODY if preparing else BODY+NECK+ARMS['right']+['Joint_Right_Gripper']
+            if max(abs(q[n]-source[n]) for n in fixed)>.7:raise ValueError('固定身体/另一侧关节已移动')
+            return q
+        def start_gripper(angle,both=False,closing=False):
+            targets={'Joint_Left_Gripper':float(angle),'Joint_Right_Gripper':float(angle) if both else source['Joint_Right_Gripper']}
+            begin=checked();start=time.monotonic()
+            node.apply('grippers',targets,speed_scale=cfg.get('gripper_speed_scale',.5))
+            tolerance=2. if closing else open_tolerance(cfg)
+            return dict(targets=targets,begin=begin,start=start,closing=closing,history=[],last_log=0.,
+                        tolerance=tolerance,arrival=Arrival(targets,tolerance),result=None)
+        def poll_gripper(state,q,now):
+            if state['result'] is not None:return state['result']
+            targets=state['targets'];tolerance=state['tolerance'];closing=state['closing']
+            if now-state['last_log']>.5:
+                atomic_json(run/'gripper_progress.json',{'targets_deg':targets,'measured_deg':{n:q[n] for n in targets},
+                    'tolerance_deg':tolerance,'closing':closing,'time':now});state['last_log']=now
+            if state['arrival'].update(q,now):state['result']='at_target'
+            elif closing:
+                value=q['Joint_Left_Gripper'];state['history'].append((now,value))
+                history=state['history']=[v for v in state['history'] if now-v[0]<=.7]
+                if (now-state['start']>1. and len(history)>5 and now-history[0][0]>.6 and
+                        abs(value-state['begin']['Joint_Left_Gripper'])>8. and np.ptp([v[1] for v in history])<.8):
+                    state['result']='contact_unconfirmed'
+            if state['result'] is not None:hold_groups(node,['grippers']);return state['result']
+            if now-state['start']>=15:
+                details='，'.join(f'{n}: 实际{q[n]:.2f}°/目标{v:.2f}°' for n,v in targets.items())
+                raise ValueError(f'夹爪未稳定到位（容差{tolerance:.1f}°）：'+details)
+            return None
+        def finish_gripper(state):
+            while state['result'] is None:poll_gripper(state,checked(),time.monotonic())
+            return state['result']
+        opening=None
+        if preparing:
+            print('双臂、头部复位并同步张开双夹爪…',flush=True)
+            opening=start_gripper(cfg['gripper_open_deg'],both=True)
+        else:
+            atomic_json(receipt_path,{'status':'consumed','token':plan.get('prepare_token')})
+            finish_gripper(start_gripper(cfg['gripper_open_deg']))
+        contact=None
+        fk=None
+        if not preparing:
+            from autolife_handeye_calibration_306.core import Kinematics,TORSO
+            from autolife_handeye_calibration_306.verification_core import wrist_frame,q_for_fk
+            fk=Kinematics(cfg['urdf_path'])
+        for index,segment in enumerate(plan['segments']):
+            print(segment['name']+'…',flush=True)
+            path=JointPath(names,segment['waypoints'])
+            if preparing:configure_reset_path(path,cfg)
+            else:configure_grasp_path(path,cfg)
+            lead=cfg.get('reset_feedback_lead_deg',5.) if preparing else cfg.get('grasp_feedback_lead_deg',3.)
+            if not 0<float(lead)<=(5. if preparing else 3.):raise ValueError('反馈领先量超出范围')
+            follower=Follower(path,time.monotonic(),lead)
+            sender=GoalSender();last_command=-float('inf')
+            deadline=time.monotonic()+90;last_progress=0.
+            stage_started=time.monotonic();previous_sample=None
+            transit=not preparing and segment.get('phase') in ('pregrasp','withdraw')
+            endpoint=segment['waypoints'][-1]
+            goal_pose=fk.fk(TORSO,wrist_frame(cfg),q_for_fk(endpoint,cfg)) if fk is not None else None
+            arrival=Arrival({n:endpoint[n] for n in names},tolerance if preparing else 1. if transit else .35,
+                            duration=.15 if preparing else .2 if transit else .35)
+            while True:
+                q=checked();now=time.monotonic()
+                if opening is not None:poll_gripper(opening,q,now)
+                if now>deadline:raise ValueError('阶段运动超时')
+                command=None
+                if now-last_command>=1./60.:
+                    command=follower.step(q,now);last_command=now
+                if command is not None:
+                    if limit_policy is not None:check_pose(limit_policy,command)
+                    groups=[('left_arm',ARMS['left']),('right_arm',ARMS['right']),('neck',NECK)] if preparing else [('left_arm',names)]
+                    for group,ns in groups:
+                        targets={n:command[n] for n in ns}
+                        if sender.needed(group,targets,q,tolerance):node.apply(group,targets,speed_scale=1.)
+                # Reset uses the same 1deg physical tolerance as handeye. Do not
+                # wait forever for unrelated/last sub-tolerance bridge goals.
+                if (preparing or follower.final) and arrival.update(q,now):
+                    accepted=not transit or transit_pose_ok(fk.fk(TORSO,wrist_frame(cfg),q_for_fk(q,cfg)),goal_pose,plan['tcp'])
+                    if accepted:
+                        print('到位：'+segment['name']+('（关节≤1°且末端≤8mm、方向≤2°）' if transit else ''),flush=True)
+                        hold_groups(node,['left_arm','right_arm','neck'] if preparing else ['left_arm']);break
+                if now-last_progress>.5:
+                    measured=np.array([q[n] for n in names])
+                    actual_speed=(float(np.max(np.abs(measured-previous_sample[1]))/(now-previous_sample[0]))
+                                  if previous_sample is not None else 0.)
+                    progress={'stage':segment['name'],'progress':follower.progress/path.length,
+                        'max_error_deg':max(abs(q[n]-segment['waypoints'][-1][n]) for n in names),
+                        'active_groups':list(node._active_goals),'time':now,
+                        'elapsed_sec':now-stage_started,'path_speed_limit_deg_s':path.max_speed,
+                        'path_speed_deg_s':follower.velocity,'measured_peak_deg_s':actual_speed,
+                        'command_lead_deg':float(np.max(np.abs(follower.command-measured))),
+                        'feedback_limited_ticks':follower.limited_ticks,'ticks':follower.total_ticks}
+                    progress['position_sync_active']=bool(session and session.active)
+                    progress['measured_deg']={n:q[n] for n in names}
+                    progress['endpoint_deg']={n:endpoint[n] for n in names}
+                    progress['bridge_commands_deg']=dict(node._active_goals.get('left_arm',{}).get('commands',{}))
+                    if goal_pose is not None:
+                        pose=fk.fk(TORSO,wrist_frame(cfg),q_for_fk(q,cfg));tcp=np.asarray(plan['tcp'])
+                        progress['model_tcp_error_mm']=float(np.linalg.norm(
+                            pose[:3,3]+pose[:3,:3]@tcp-goal_pose[:3,3]-goal_pose[:3,:3]@tcp)*1000)
+                    atomic_json(run/'motion_progress.json',progress)
+                    with (run/'motion_trace.jsonl').open('a') as trace:trace.write(json.dumps(progress)+'\n')
+                    previous_sample=(now,measured.copy())
+                    last_progress=now
+            if segment.get('phase','grasp' if index==1 else '')=='grasp' and not preparing:
+                contact=finish_gripper(start_gripper(cfg['gripper_closed_deg'],closing=True))
+                atomic_json(run/'grip_result.json',{'state':contact,'commanded_angle_deg':cfg['gripper_closed_deg'],
+                                                   'measured_angle_deg':node.snapshot()['Joint_Left_Gripper']})
+                # User-authorized automatic carry. A settled jaw can also mean
+                # friction or an empty grasp: do not label this grip success.
+                print('闭爪稳定，自动抬起并收回。',flush=True)
+        if preparing:
+            finish_gripper(opening)
+            q=checked()
+            if max(abs(q[n]-cfg['gripper_open_deg']) for n in ['Joint_Left_Gripper','Joint_Right_Gripper'])>open_tolerance(cfg):
+                raise ValueError('复位末尾夹爪开度发生变化，请检查')
+            record={'status':'prepared','q':node.snapshot(),'token':uuid.uuid4().hex,'time':time.monotonic()}
+            print('复位完成，双夹爪全开；重新识别饮料。',flush=True)
+        else:
+            record={'status':'completed','q':node.snapshot(),'grip_success_verified':False,
+                    'grip_state':contact,'carry_trigger':'stable_closure',
+                    'plan_id':plan['plan_id'],'product':plan['product']['name'],
+                    'physical_accuracy_measured':False}
+            print('抓取流程结束，保持饮料；不会自动松爪。',flush=True)
+    except Exception as exc:
+        record={'status':'stopped','reason':str(exc)}
+        if node and getattr(node,'last_stop_details',None):record['diagnostic']=node.last_stop_details
+        print('已停止：'+str(exc),flush=True)
+    finally:
+        if node:
+            try:hold_groups(node,['left_arm','right_arm','neck','grippers'] if preparing else ['left_arm','grippers'])
+            except Exception as exc:print('保持反馈不可用：'+str(exc),flush=True)
+            if session is not None:
+                try:
+                    if not session.close():print('SYNC退出未收到确认，厂商心跳保护将保持并退出。',flush=True)
+                except Exception as exc:print('SYNC退出异常，厂商心跳保护将接管：'+str(exc),flush=True)
+            node._lock('饮料抓取停止/完成，保持当前位置');node.destroy_node()
+        if rclpy.ok():rclpy.shutdown()
+        atomic_json(run/'execution_result.json',record)
+        if preparing:atomic_json(run/'prepare_result.json',record)
+
+
+if __name__=='__main__':main()

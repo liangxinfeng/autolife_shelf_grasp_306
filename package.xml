@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>autolife_shelf_grasp_306</name><version>0.1.0</version>
+  <description>306桌面饮料分割、商品匹配与约束抓取实验</description>
+  <maintainer email="robot@example.com">Robot development</maintainer>
+  <license>Proprietary</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend><exec_depend>std_msgs</exec_depend>
+  <exec_depend>autolife_handeye_calibration_306</exec_depend>
+  <exec_depend>control_center_joint_control</exec_depend>
+  <exec_depend>openarmx_teleop_vr_306_v4</exec_depend>
+  <exec_depend>python3-pyqt5</exec_depend><exec_depend>python3-yaml</exec_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>
