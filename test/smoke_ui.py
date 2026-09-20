@@ -61,6 +61,18 @@ window.receive_event({'event':'scene','items':[
 window.list.setCurrentRow(1)
 window.receive_event({'event':'catalog','products':[product],'items':window.items[:]})
 assert window.selected_id()==2 # library edits must not change the image being added
+sent=[]
+window.send=lambda action,**kw:sent.append((action,kw))
+question=Q.QMessageBox.question
+Q.QMessageBox.question=lambda *a,**kw:Q.QMessageBox.No
+window.catalog_dialog.remove_product();window.prepare_robot();assert not sent
+Q.QMessageBox.question=lambda *a,**kw:Q.QMessageBox.Yes
+window.catalog_dialog.remove_product();window.prepare_robot()
+assert sent==[('remove_product',{'product_id':'gum'}),('prepare',{})]
+Q.QMessageBox.question=question
+window.receive_event({'event':'catalog','products':[],'items':[]})
+assert window.catalog_dialog.current() is None and not window.execute.isEnabled()
+assert all(not b.isEnabled() for b in window.catalog_dialog.buttons)
 window.catalog_dialog.close()
 window.close()
 assert not errors,errors

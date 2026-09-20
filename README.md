@@ -1,6 +1,12 @@
 # 云蝶306 · 视觉抓取实验
 
-306机器人 `~/grasp306` 对应功能包，提供物品识别、商品录入、深度定位、抓取规划和执行界面。源码取自306当前使用版本（2026-09-16）。
+306机器人 `~/grasp306` 对应功能包，提供物品识别、商品录入、深度定位、抓取规划和执行界面。源码取自306当前功能包（2026-09-20导出）。
+
+## 版本区分
+
+- **`robot306-20260920`**：本分支，306当前源码、配置与使用说明。
+- **`main`**：保留此前上传的2026-09-16版本，不覆盖、不替换。
+- 本次仅归档源码，不修改机器人运行程序，不启动复位、抓取或导航。
 
 ## 功能
 
@@ -9,20 +15,24 @@
 - 使用手眼标定外参和夹爪TCP，规划预抓取、抓取、抬起、收回完整流程。
 - 优先正向接近，必要时逐步尝试小角度；收回方向单独求解，避免仅为收回困难而增大抓取角度。
 - 一键复位并张开夹爪；确认抓取后自动闭爪、抬起和收回，保留停止按钮。
+- 抓取窗口中可手动控制底盘，调整机器人与货架的相对位置。
+- 对接控制中心导航，显示小地图、切换地图、查看及选择共享航点。
+- 演示流程：前台 → 货架 → 识别并抓取 → 固定持物姿态收回 → 导航返回前台 → 识别桌面并放置饮料。
+- 支持部分可见物体的定位；录入高度仅作参考，规划仍检查实际深度、运动学及执行条件。
 
 ## 环境与安装
 
 面向Ubuntu 24.04、ROS 2 Jazzy和306厂商运行环境，**不是通用机器人即装即用软件**。需要：
 
 - [手眼标定功能包](https://github.com/liangxinfeng/autolife_handeye_calibration_306)。
-- [控制中心](https://github.com/liangxinfeng/autolife_robot_control_center)中的 `control_center_joint_control`。
+- [306控制中心分支](https://github.com/liangxinfeng/autolife_robot_control_center/tree/robot306-20260920)中的关节、底盘控制权与导航模块。
 - [遥操V4](https://github.com/liangxinfeng/openarmx_teleop_vr_306_v4)的运动学与碰撞模块。
 - 厂商SDK、机器人URDF、相机共享内存及支持保持式SYNC入口的机械臂服务；这些不随仓库分发。
 - 系统Python的ROS/Qt依赖，以及 `robot_env` 内的PyTorch、Ultralytics、Pinocchio、碰撞库等依赖。
 
 ```bash
 cd ~/ros2_ws/src
-git clone https://github.com/liangxinfeng/autolife_shelf_grasp_306.git
+git clone --branch robot306-20260920 https://github.com/liangxinfeng/autolife_shelf_grasp_306.git
 cd ~/ros2_ws
 source /opt/ros/jazzy/setup.bash
 colcon build --packages-select autolife_shelf_grasp_306 --symlink-install
@@ -46,6 +56,8 @@ ros2 launch autolife_shelf_grasp_306 grasp.launch.py
 启动 → 复位并准备 → 识别/录入物品 → 选择物品 → 规划预览 → 确认抓取。
 
 复位、确认抓取均会驱动真机；仅启动界面不会自动运动。不要同时运行其他机械臂控制程序。
+
+演示模式需先在控制中心启动导航并完成定位，再选择前台、货架航点及商品。放置参数可在界面调整。详见[航点演示](NAVIGATION_DEMO.md)、[底盘控制](CHASSIS_ZH.md)和[部分可见目标](VISIBLE_TARGET_ZH.md)。此流程依赖相机视野、机器人可达空间和现场安全条件，不保证所有场景一次成功。
 
 ## 边界与数据
 

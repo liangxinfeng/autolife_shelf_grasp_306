@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from autolife_shelf_grasp_306.bottle import center_from_points,combine,horizontal_basis,DepthQualityError
+from autolife_shelf_grasp_306.bottle import center_from_points,combine,horizontal_basis,DepthQualityError,estimate,planning_product
 from autolife_shelf_grasp_306.core import stages,reset_blockers,execution_blockers
 
 
@@ -18,9 +18,61 @@ def test_center_does_not_assume_z_up(sign):
     assert stats['height_source']=='visible_bottle_midpoint'
 
 
-def test_incomplete_height_rejected():
+def test_incomplete_height_uses_visible_center():
     p,product=cylinder();p=p[p[:,2]>.2]
-    with pytest.raises(DepthQualityError,match='高度'):center_from_points(p,[0,0,1],product,[0,.1,.2])
+    c,stats,_=center_from_points(p,[0,0,1],product,[0,.1,.2])
+    np.testing.assert_allclose(c,[.6,.1,.255],atol=.002)
+    assert 105<stats['observed_height_mm']<112
+
+
+@pytest.mark.parametrize('reference',[.04,.10,.22,.40])
+def test_reference_height_does_not_change_target(reference):
+    p,product=cylinder();product['height_m']=reference
+    c,stats,_=center_from_points(p,[0,0,1],product,[0,.1,.2])
+    np.testing.assert_allclose(c,[.6,.1,.2],atol=.002)
+
+
+def test_only_tiny_fragment_still_rejected():
+    p,product=cylinder();p=p[np.abs(p[:,2]-.2)<.01]
+    with pytest.raises(DepthQualityError,match='25mm'):
+        center_from_points(p,[0,0,1],product,[0,.1,.2])
+
+
+def cropped_frame(monkeypatch):
+    import autolife_handeye_calibration_306.depth_target as depth_target
+    monkeypatch.setattr(depth_target,'aligned_depth',lambda *args:None)
+    h,w=160,180;K=np.array([[600.,0,90],[0,600.,80],[0,0,1.]])
+    ray=(np.arange(w)-90)/600.;a=1+ray**2;discriminant=.6**2-a*(.6**2-.035**2)
+    valid=discriminant>0;z=(.6-np.sqrt(np.maximum(0,discriminant)))/a
+    mask=np.broadcast_to(valid,(h,w)).copy();mask[120:]=False
+    frame={'image':np.zeros((h,w,3),np.uint8),'depth':np.broadcast_to(z*1000,(h,w)).copy(),
+           'K':K,'D':np.zeros(5),'frame_id':1,'depth_id':1,
+           'intrinsics':{'model_id':0},'depth_intrinsics':{'model_id':0}}
+    return frame,mask,{'depth_scale_m':.001,'depth_range_m':[.15,2.]}
+
+
+def test_image_border_crop_plans_visible_midpoint(monkeypatch):
+    frame,mask,cfg=cropped_frame(monkeypatch)
+    c,stats=estimate(frame,mask,np.eye(4),[0,-1,0],{'diameter_m':.07,'height_m':.22},cfg)
+    assert stats['image_cropped'] and .09<stats['observed_height_mm']/1000<.13
+    assert abs(c[0])<.002 and abs(c[2]-.6)<.003 and -.025<c[1]<-.015
+
+
+def test_cropped_object_still_requires_depth_and_stable_center(monkeypatch):
+    frame,mask,cfg=cropped_frame(monkeypatch);frame['depth'][:]=0
+    with pytest.raises(DepthQualityError,match='深度不足'):
+        estimate(frame,mask,np.eye(4),[0,-1,0],{'diameter_m':.07,'height_m':.22},cfg)
+
+
+def test_measured_height_and_hidden_collision_extent_do_not_mutate_catalog():
+    p={'id':'sprite','geometry':'cylinder','diameter_m':.07,'height_m':.22}
+    geometry={'observed_height_mm':100.,'image_cropped':True}
+    result=planning_product(p,geometry)
+    assert result['height_m']==.1 and result['collision_height_m']==pytest.approx(.34)
+    assert p['height_m']==.22 and 'collision_height_m' not in p
+    geometry.update(observed_height_mm=280.,image_cropped=False)
+    result=planning_product(p,geometry)
+    assert result['height_m']==.28 and result['collision_height_m']==.28
 
 
 def test_invalid_dimensions_are_not_retryable_depth_error():

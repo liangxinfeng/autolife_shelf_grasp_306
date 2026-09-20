@@ -31,6 +31,10 @@ orientation_relax_deg: 30.0
 pregrasp_m: 0.12
 lift_m: 0.035
 withdraw_m: 0.20
+fixed_carry_enabled: true
+# Same left-arm endpoint as the existing VR reset; never invoke reset/open jaws.
+carry_pose_deg: [0, 0, 0, 110, 0, 13, 0]
+carry_max_tilt_deg: 45.0
 # No support plane is estimated. Up is computed from current URDF kinematics.
 gripper_max_width_m: 0.095
 gripper_open_deg: 10.0
