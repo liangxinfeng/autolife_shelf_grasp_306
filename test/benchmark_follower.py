@@ -1,6 +1,6 @@
 """Same first-order motor simulation for old/new path-clock logic. No ROS."""
 import numpy as np
-from autolife_handeye_calibration_306.verification_trajectory import JointPath
+from autolife_handeye_calibration_307.verification_trajectory import JointPath
 from autolife_shelf_grasp_306.motion import Follower,configure_grasp_path
 
 def simulate(partial):

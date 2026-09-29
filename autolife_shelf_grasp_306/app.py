@@ -6,6 +6,7 @@ import tempfile
 import time
 from pathlib import Path
 from PyQt5 import QtCore as C, QtGui as G, QtWidgets as Q
+from .demo_navigation import DemoNavigation
 
 STYLE='''
 QWidget {background:#101821;color:#e8eff6;font-family:"Noto Sans CJK SC";font-size:15px;}
@@ -70,7 +71,7 @@ class ProductEditor(Q.QDialog):
         self.width_label=Q.QLabel();self.depth_label=Q.QLabel()
         self.shape.currentIndexChanged.connect(self.fields)
         form.addRow('名称',self.name);form.addRow('物品类型',self.shape)
-        form.addRow(self.width_label,self.width);form.addRow('整体高度（上下）',self.height);form.addRow(self.depth_label,self.depth)
+        form.addRow(self.width_label,self.width);form.addRow('整体高度（参考）',self.height);form.addRow(self.depth_label,self.depth)
         hint=Q.QLabel('两种模式共用 · 只修改参数，不新增图片' if editing else '两种模式共用。保存同名商品：更新参数并追加当前图像');hint.setWordWrap(True);form.addRow(hint)
         self.load(product or dict(name='',diameter_m=.07,height_m=.12,depth_m=.04,geometry='solid',category=category))
         def picked(text):
@@ -109,7 +110,7 @@ class CatalogDialog(Q.QDialog):
         self.images=Q.QListWidget();self.images.setViewMode(Q.QListView.IconMode);self.images.setIconSize(C.QSize(128,128))
         self.images.setResizeMode(Q.QListView.Adjust);layout.addWidget(self.images,1)
         row=Q.QHBoxLayout();layout.addLayout(row);self.buttons=[]
-        for label,fn in [('修改参数',self.edit),('追加当前图像',self.add),('删除选中样本',self.remove)]:
+        for label,fn in [('修改参数',self.edit),('追加当前图像',self.add),('删除选中样本',self.remove),('删除整个商品',self.remove_product)]:
             b=Q.QPushButton(label);b.clicked.connect(fn);row.addWidget(b);self.buttons.append(b)
         note=Q.QLabel('追加前请先在主界面选中物品。删除会移除匹配特征，原图保留用于恢复。');note.setWordWrap(True);layout.addWidget(note)
         close=Q.QPushButton('关闭');close.clicked.connect(self.close);layout.addWidget(close)
@@ -143,28 +144,42 @@ class CatalogDialog(Q.QDialog):
         if Q.QMessageBox.question(self,'删除样本','删除这张样本及对应匹配特征？\n全部删除后，该商品将暂时无法自动匹配。',defaultButton=Q.QMessageBox.No)==Q.QMessageBox.Yes:
             self.owner.send('remove_sample',product_id=p['id'],index=item.data(C.Qt.UserRole))
 
+    def remove_product(self):
+        p=self.current()
+        if not p or self.owner.busy or self.owner.motion:return
+        if Q.QMessageBox.question(self,'删除整个商品',
+            f'删除“{p["name"]}”及全部匹配样本？\n两种识别模式同步移除。历史商品库和样本原图保留，可恢复。',
+            defaultButton=Q.QMessageBox.No)==Q.QMessageBox.Yes:
+            self.owner.send('remove_product',product_id=p['id'])
 
-class Window(Q.QWidget):
+
+class Window(DemoNavigation,Q.QWidget):
     def __init__(self,root,run,start_worker=True):
         super().__init__();self.root=Path(root);self.run=Path(run);self.buffer=b'';self.request=0;self.busy=True
         self.ready=False;self.frozen=False;self.items=[];self.blockers=[];self.process=None;self.cancel_pending=False
         self.pending_plan=None;self.expected_target=None;self.picking_rim=False
-        self.catalog_dialog=None
-        self.setWindowTitle('云蝶 · 物品抓取');self.resize(1260,800)
+        self.catalog_dialog=None;self.chassis_dialog=None
+        self.demo_active=False;self.demo_phase=None;self.demo_context=None
+        self.setWindowTitle('云蝶 · 物品抓取 · 放置观察版');self.resize(1260,800)
         outer=Q.QVBoxLayout(self);outer.setContentsMargins(26,22,26,20);outer.setSpacing(18)
         header=Q.QHBoxLayout();title=Q.QLabel('云蝶  /  物品抓取');title.setObjectName('title');header.addWidget(title);header.addStretch()
         self.mode=Q.QComboBox();self.mode.addItem('仅饮料','beverages');self.mode.addItem('通用物品','all');self.mode.setCurrentIndex(1)
         self.mode.currentIndexChanged.connect(self.change_mode);header.addWidget(self.mode)
-        self.badge=Q.QLabel('306 · 左臂 · 桌面实验');self.badge.setObjectName('muted');header.addWidget(self.badge);outer.addLayout(header)
+        self.demo=Q.QCheckBox('演示模式');header.addWidget(self.demo)
+        self.demo.toggled.connect(lambda _:self.controls())
+        self.demo_settings=Q.QPushButton('演示参数');header.addWidget(self.demo_settings)
+        self.demo_settings.clicked.connect(self.edit_demo_settings)
+        self.badge=Q.QLabel('300 · 左臂 · 桌面实验');self.badge.setObjectName('muted');header.addWidget(self.badge);outer.addLayout(header)
         content=Q.QHBoxLayout();content.setSpacing(18);outer.addLayout(content,1)
         left=Q.QVBoxLayout();content.addLayout(left,3)
         self.video=ImageView();self.video.clicked.connect(self.image_clicked);left.addWidget(self.video,1)
         line=Q.QHBoxLayout();self.view_text=Q.QLabel('实时 RGB');self.view_text.setObjectName('muted');line.addWidget(self.view_text);line.addStretch()
-        live=Q.QPushButton('返回实时画面');live.clicked.connect(self.live);line.addWidget(live);left.addLayout(line)
+        live=Q.QPushButton('返回实时画面');self.live_button=live;live.clicked.connect(self.live);line.addWidget(live);left.addLayout(line)
+        self.chassis_button=Q.QPushButton('底盘调整');self.chassis_button.clicked.connect(self.adjust_chassis);line.addWidget(self.chassis_button)
         panel=Q.QFrame();panel.setObjectName('panel');panel.setMaximumWidth(350);panel.setMinimumWidth(290);right=Q.QVBoxLayout(panel);right.setContentsMargins(20,20,20,20);content.addWidget(panel,1)
         label=Q.QLabel('01   选择物品');label.setStyleSheet('font-size:19px;font-weight:600');right.addWidget(label)
         self.list=Q.QListWidget();self.list.currentItemChanged.connect(self.select);right.addWidget(self.list,1)
-        self.prepare=Q.QPushButton('复位并准备');self.prepare.clicked.connect(lambda:self.send('prepare'));right.addWidget(self.prepare)
+        self.prepare=Q.QPushButton('复位并准备');self.prepare.clicked.connect(self.prepare_robot);right.addWidget(self.prepare)
         self.prepare.setToolTip('点击即执行：双臂和头部复位、双夹爪全开。请先取出物品并清空运动空间。腰腿不动。')
         self.scan=Q.QPushButton('识别物品');self.scan.setObjectName('primary');self.scan.clicked.connect(lambda:self.send('scan'));right.addWidget(self.scan)
         tools=Q.QHBoxLayout();right.addLayout(tools)
@@ -179,12 +194,20 @@ class Window(Q.QWidget):
         self.footer=Q.QLabel(self);self.footer.hide()
         self.timer=C.QTimer(self);self.timer.timeout.connect(self.tick);self.timer.start(80)
         self.preview_stamp=0;self.motion=None
+        from .navigation_ui import NavigationPanel
+        (self.run/'heartbeat').touch()
+        self.navigation=NavigationPanel(self,start=start_worker);self.navigation.setMaximumWidth(270)
+        left.removeWidget(self.video);view_row=Q.QHBoxLayout();view_row.addWidget(self.video,1);view_row.addWidget(self.navigation)
+        left.insertLayout(0,view_row,1)
         if start_worker:
             import yaml
             cfg=yaml.safe_load((self.root/'config/grasp.yaml').read_text('utf-8'))
             proc=C.QProcess(self);self.process=proc
             env=C.QProcessEnvironment.systemEnvironment()
             env.insert('LD_LIBRARY_PATH',str(Path(cfg['python']).parent.parent/'lib')+':'+env.value('LD_LIBRARY_PATH'))
+            # IK uses tiny 7-variable matrices; extra BLAS threads add scheduling
+            # jitter. Scope this to the read-only planning/perception worker.
+            env.insert('OPENBLAS_NUM_THREADS','1');env.insert('MKL_NUM_THREADS','1')
             proc.setProcessEnvironment(env)
             proc.readyReadStandardOutput.connect(self.read);proc.readyReadStandardError.connect(self.log_errors)
             proc.finished.connect(self.finished);proc.errorOccurred.connect(lambda _:self.status.setText('后台启动失败，请查看运行日志'))
@@ -194,8 +217,28 @@ class Window(Q.QWidget):
     def selected_id(self):
         item=self.list.currentItem();return item.data(C.Qt.UserRole) if item else None
 
+    def edit_demo_settings(self):
+        if self.demo_active or self.motion or self.busy:return
+        from .demo_ui import edit_settings
+        edit_settings(self)
+
+    def adjust_chassis(self):
+        if self.busy or self.motion:return
+        from .chassis_ui import ChassisDialog
+        self.invalidate_plan();self.items=[];self.list.clear();self.live()
+        self.chassis_dialog=ChassisDialog(self)
+        self.chassis_dialog.move(self.mapToGlobal(C.QPoint(max(0,self.width()-self.chassis_dialog.width()-20),80)))
+        self.chassis_dialog.exec_()
+        self.chassis_dialog.shutdown();self.chassis_dialog.deleteLater();self.chassis_dialog=None
+        self.status.setText('底盘位置已调整，请重新识别物品并规划。');self.controls()
+
     def controls(self):
-        idle=self.ready and not self.busy and self.motion is None
+        idle=self.ready and not self.busy and self.motion is None and not self.demo_active
+        if hasattr(self,'navigation'):idle=idle and not self.navigation.inflight
+        self.demo.setEnabled(idle);self.demo_settings.setEnabled(idle)
+        self.live_button.setEnabled(idle)
+        if hasattr(self,'navigation'):self.navigation.controls(idle)
+        self.chassis_button.setEnabled(idle and self.chassis_dialog is None)
         self.scan.setEnabled(idle);self.list.setEnabled(idle)
         self.mode.setEnabled(idle);self.manage.setEnabled(idle)
         if self.catalog_dialog:
@@ -206,6 +249,8 @@ class Window(Q.QWidget):
         item=next((v for v in self.items if v['id']==self.selected_id()),{})
         self.rim.setVisible(item.get('geometry')=='bag_edge')
         self.rim.setEnabled(idle and self.frozen and item.get('geometry')=='bag_edge')
+        if self.demo.isChecked():
+            self.execute.setText('确认演示抓取');self.execute.setEnabled(idle)
 
     def send(self,action,**values):
         if not self.process:return
@@ -216,8 +261,15 @@ class Window(Q.QWidget):
                                   if chosen else None)
         self.request+=1;self.busy=True;self.cancel_pending=False;self.execute.setEnabled(False);self.video.path=[]
         self.process.write((json.dumps({'action':action,'request_id':self.request,**values},ensure_ascii=False)+'\n').encode())
-        self.status.setText({'scan':'正在识别饮料…','plan':'正在定位和规划…','enroll':'保存商品样本…','prepare':'检查复位路径，通过后立即复位并张开双爪…'}.get(action,'处理中…'))
+        self.status.setText({'scan':'正在识别饮料…','plan':'正在定位和规划…','enroll':'保存商品样本…','prepare':'检查原VR复位路径…','remove_product':'正在删除商品…'}.get(action,'处理中…'))
         self.controls()
+
+    def prepare_robot(self):
+        if self.busy or self.motion:return
+        if Q.QMessageBox.question(self,'复位到原VR准备位姿',
+            '保持当前位置使能，再直接到原VR准备位姿并张开双夹爪；腰腿保持不动。\n'
+            '请清空夹爪及机械臂运动范围，并准备好实体急停。',
+            defaultButton=Q.QMessageBox.No)==Q.QMessageBox.Yes:self.send('prepare')
 
     def change_mode(self):
         if not self.ready:return
@@ -252,10 +304,22 @@ class Window(Q.QWidget):
             self.execute.setToolTip('；'.join(self.blockers))
         elif kind=='reset_planned':
             self.live();self.items=[];self.list.clear()
-            self.status.setText(f'复位路径预检完成 · {data["checked"]} 状态 · 双夹爪全开10°')
+            self.status.setText('保持式使能，复位到原VR位姿并张开双爪…')
             if data['blockers']:
                 self.status.setText('；'.join(data['blockers']))
+                if self.demo_active:self.demo_failure('；'.join(data['blockers']))
             else:self.launch_motion('last_reset_plan.json',preparing=True)
+        elif kind=='observe_planned':
+            if not self.demo_active or self.demo_phase!='planning':return
+            self.demo_context['observation_plan_id']=data['plan_id']
+            self.live();self.status.setText('保持夹紧，轻抬手臂后重新观察桌面…')
+            self.demo_phase='observe';self.launch_motion(data['filename'],placement=data)
+        elif kind=='place_planned':
+            if not self.demo_active or self.demo_phase!='planning':return
+            self.video.pix=G.QPixmap(str(self.run/'scene.jpg'));self.video.shape=data['shape']
+            self.video.path=data['pixels'];self.video.boxes=[];self.frozen=True
+            self.view_text.setText('自动放置点 · 桌面与轨迹检查已通过')
+            self.demo_phase='place';self.launch_motion(data['filename'],placement=data)
         elif kind=='prepared':
             self.live();self.send('scan')
         elif kind in ('scene','enrolled','catalog'):
@@ -276,25 +340,32 @@ class Window(Q.QWidget):
             if kind=='catalog':
                 if self.catalog_dialog is None:self.catalog_dialog=CatalogDialog(self)
                 self.catalog_dialog.refresh(data['products'],data.get('product_id'));self.catalog_dialog.show()
+            if kind=='scene' and self.demo_active and self.demo_phase=='scan':self.demo_scene_ready()
         elif kind=='planned':
             target=data.get('target',{});pid=data.get('plan_id','')
             if (not self.expected_target or target.get('instance_id')!=self.selected_id() or
                 any(target.get(k)!=v for k,v in self.expected_target.items()) or
                 len(pid)!=32 or any(c not in '0123456789abcdef' for c in pid) or
                 data.get('filename')!='plan_'+pid+'.json'):
-                self.invalidate_plan();self.status.setText('规划目标与所选饮料不一致，请重新规划。');self.controls();return
+                self.invalidate_plan();self.status.setText('规划目标与所选饮料不一致，请重新规划。')
+                if self.demo_active:self.demo_failure('规划商品与选择不一致')
+                self.controls();return
             self.pending_plan=data
             self.frozen=True;self.video.pix=G.QPixmap(str(self.run/'scene.jpg'));self.video.shape=data['shape'];self.video.boxes=[];self.video.path=data['pixels']
             mode='柔性夹取' if data.get('orientation_mode')=='flexible' else '水平夹取'
             retreat=data.get('withdraw_yaw_deg',0.)
             retreat_text=f' · 收回转向 {retreat:+.0f}°' if retreat else ''
+            if data.get('withdraw_orientation_mode')=='adaptive':retreat_text=' · 自然收回'
+            if data.get('withdraw_orientation_mode')=='fixed_carry':retreat_text=' · 固定持物姿态'
             self.status.setText(f'{target["name"]} · {mode} · 接近 {data.get("approach_yaw_deg",0):.0f}°{retreat_text} · {data["seconds"]:.1f}s')
-            self.view_text.setText('路径预览 · 1预抓取  2抓取  3抬起  4收回')
+            self.view_text.setText('路径预览 · 1预抓取  2抓取  3抬起  4退离'+('  5固定持物' if data.get('carry_protocol_version') else ''))
             self.blockers=data['blockers'];self.execute.setToolTip('；'.join(self.blockers));self.execute.setEnabled(not self.blockers)
             self.execute.setText('确认抓取 · '+target['name'])
             if self.blockers:self.status.setText(target['name']+'路径已预览；'+'；'.join(self.blockers))
             self.footer.setText('仅预览 · '+('；'.join(self.blockers[1:3]) if self.blockers else '请确认操作空间清空'))
+            if self.demo_active and self.demo_phase=='grasp_plan':self.demo_plan_ready(data)
         elif kind in ('error','fatal'):
+            self.demo_active=False;self.demo_phase=None
             self.invalidate_plan();self.status.setText(data['text'])
             if self.catalog_dialog and self.catalog_dialog.isVisible():self.catalog_dialog.info.setText(data['text'])
             if kind=='fatal':self.ready=False
@@ -340,6 +411,7 @@ class Window(Q.QWidget):
 
     def start_execution(self):
         if self.motion:return
+        if self.demo.isChecked():self.start_navigation_demo();return
         if self.blockers:Q.QMessageBox.information(self,'尚未开放运动','\n'.join(self.blockers));return
         data=self.pending_plan
         if not data or data['target']['instance_id']!=self.selected_id():
@@ -350,13 +422,16 @@ class Window(Q.QWidget):
                 raise ValueError('本轮复位尚未完成，请先复位并准备')
         except (ValueError,OSError) as exc:
             self.invalidate_plan();self.status.setText('不能开始抓取：'+str(exc));return
-        if Q.QMessageBox.question(self,'确认抓取：'+data['target']['name'],'使用当前手眼标定及15mm夹取中心补偿；实物精度尚未验收。\n本次不检查桌面、货架及邻物，请确认预览路径空旷。\n闭爪稳定后自动抬起并收回，不再等待确认；尚无夹稳检测。\n已提高运动速度。人员离开运动范围并准备实体急停，开始？',defaultButton=Q.QMessageBox.No)!=Q.QMessageBox.Yes:return
+        if Q.QMessageBox.question(self,'确认抓取：'+data['target']['name'],'使用当前手眼标定及15mm夹取中心补偿；实物精度尚未验收。\n抓取段不检查桌面、货架及邻物，请确认预览路径空旷。\n闭爪稳定后自动抬起并收回；尚无夹稳检测。\n人员离开运动范围并准备实体急停，开始？',defaultButton=Q.QMessageBox.No)!=Q.QMessageBox.Yes:return
         self.launch_motion(data['filename'])
 
-    def launch_motion(self,filename,preparing=False):
+    def launch_motion(self,filename,preparing=False,placement=None):
         if self.cancel_pending:return
         extra=[]
-        if preparing:path=self.root/'data'/filename
+        if placement is not None:
+            if not self.demo_active or self.demo_phase not in ('place','observe'):return
+            path=self.run/filename;extra=['--expected-plan-id',placement['plan_id'],'--expected-product-id',placement['product_id']]
+        elif preparing:path=self.root/'data'/filename
         else:
             data=self.pending_plan
             if not data or filename!=data['filename'] or data['target']['instance_id']!=self.selected_id():
@@ -375,6 +450,7 @@ class Window(Q.QWidget):
 
     def motion_error(self,error):
         if error==C.QProcess.FailedToStart:
+            self.demo_active=False;self.demo_phase=None
             self.motion=None;self.status.setText('运动进程启动失败，未执行运动。');self.controls()
 
     def motion_output(self):
@@ -385,17 +461,39 @@ class Window(Q.QWidget):
             if text:self.status.setText(text[-250:])
 
     def motion_finished(self,*args):
+        phase=self.demo_phase
+        self.demo_phase=None
         self.invalidate_plan()
         self.motion=None;self.execute.setText('确认抓取');self.execute.setEnabled(False)
         result_path=self.run/'execution_result.json'
         try:result=json.loads(result_path.read_text('utf-8')) if result_path.exists() else {}
         except (ValueError,OSError):result={}
+        if self.demo_active:
+            if phase=='prepare' and result.get('status')=='prepared':
+                self.navigate_demo('to_shelf');return
+            if phase=='grasp' and result.get('status')=='completed' and result.get('plan_id')==self.demo_context['grasp_plan_id']:
+                from .core import atomic_json
+                atomic_json(self.run/'demo_grasp_result.json',result)
+                self.navigate_demo('to_front');return
+            if phase=='observe' and result.get('status')=='observed' and result.get('plan_id')==self.demo_context.get('observation_plan_id'):
+                from .core import atomic_json
+                atomic_json(self.run/'demo_observe_result.json',result)
+                self.demo_phase='planning';self.send('demo_place');return
+            if phase=='place' and result.get('status')=='placed':
+                self.demo_active=False;self.demo_phase=None;self.live()
+                self.status.setText('演示完成：已执行放置并空手收回。');self.controls();return
+            self.demo_active=False;self.demo_phase=None
+            self.status.setText('演示已停止：'+result.get('reason','前一阶段未成功，未继续后续动作。'));self.controls();return
         self.status.setText('已停止：'+result['reason'] if result.get('reason') else '复位完成。' if result.get('status')=='prepared' else '抓取流程完成。' if result.get('status')=='completed' else '运动进程意外结束，请检查日志。');self.controls()
         if self.preparing and (self.run/'prepare_result.json').exists():
             receipt=json.loads((self.run/'prepare_result.json').read_text('utf-8'))
             if receipt.get('status')=='prepared':self.send('prepared')
 
     def stop_motion(self):
+        if hasattr(self,'navigation'):self.navigation.command('stop')
+        self.demo_active=False
+        if self.motion is None:self.demo_phase=None
+        if self.chassis_dialog:self.chassis_dialog.stop()
         self.invalidate_plan()
         if self.busy and self.request>0:self.cancel_pending=True
         (self.run/'stop').touch();self.execute.setEnabled(False)
@@ -412,11 +510,17 @@ class Window(Q.QWidget):
             if stamp!=self.preview_stamp:
                 self.video.pix=G.QPixmap(str(path));self.preview_stamp=stamp;self.video.update()
 
-    def finished(self,*_):self.ready=False;self.busy=False;self.controls()
+    def finished(self,*_):
+        if self.demo_active:self.stop_motion()
+        self.ready=False;self.busy=False;self.controls()
 
     def closeEvent(self,event):
+        if self.demo_active:self.stop_motion()
+        if self.chassis_dialog:self.chassis_dialog.shutdown()
         if self.motion:
             self.stop_motion();self.status.setText('停止运动后再关闭界面');event.ignore();return
+        if not self.navigation.shutdown():
+            self.status.setText('等待本程序的导航取消确认，请停稳后再次关闭');event.ignore();return
         if self.process and self.process.state()!=C.QProcess.NotRunning:
             self.process.write(b'{"action":"quit"}\n');self.process.closeWriteChannel()
             if not self.process.waitForFinished(2000):self.process.terminate();self.process.waitForFinished(1000)

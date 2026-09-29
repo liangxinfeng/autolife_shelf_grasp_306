@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from autolife_shelf_grasp_306.motion import Arrival,Follower,GoalSender,configure_grasp_path,configure_reset_path
 from autolife_shelf_grasp_306.core import execution_blockers,open_tolerance,check_plan_identity
-from autolife_handeye_calibration_306.verification_trajectory import JointPath
+from autolife_handeye_calibration_307.verification_trajectory import JointPath
 
 
 def test_reset_arrival_does_not_wait_for_goal_bookkeeping():

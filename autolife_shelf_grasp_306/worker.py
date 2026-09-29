@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 import yaml
 from .core import ProductStore,atomic_json,execution_blockers,reset_blockers,corrected_target,product_category,match
-from .bottle import estimate,combine,DepthQualityError
+from .bottle import estimate,combine,DepthQualityError,planning_product
 from .object_geometry import estimate_object
 
 
@@ -31,8 +31,8 @@ def main():
             from .perception import Perception
             from .robot import Robot
             from .planning import Planner
-            from autolife_handeye_calibration_306.core import Kinematics,TORSO,BODY,NECK
-            from autolife_handeye_calibration_306.verification_core import camera_transform,load_geometry
+            from autolife_handeye_calibration_307.core import Kinematics,TORSO,BODY,NECK
+            from autolife_handeye_calibration_307.verification_core import camera_transform,load_geometry
             import rclpy
             cfg=yaml.safe_load((root/'config/grasp.yaml').read_text('utf-8'))
             runtime_path=root/'data/settings.json'
@@ -53,9 +53,12 @@ def main():
             rclpy.init(args=[]);robot=Robot();store=ProductStore(root/'data')
             emit('status',text='加载识别模型…')
             perception=Perception(cfg,root)
-            fk=Kinematics(cfg['urdf_path']);calibration_bytes=Path(cfg['calibration']).read_bytes()
-            calibration=json.loads(calibration_bytes);calibration_sha=hashlib.sha256(calibration_bytes).hexdigest()
-            tcp=load_geometry(calibration,fk,cfg['tcp_offset_mm'])
+            fk=Kinematics(cfg['urdf_path'])
+            calibration=None;calibration_sha=None;tcp=None
+            if Path(cfg['calibration']).is_file():
+                calibration_bytes=Path(cfg['calibration']).read_bytes()
+                calibration=json.loads(calibration_bytes);calibration_sha=hashlib.sha256(calibration_bytes).hexdigest()
+                tcp=load_geometry(calibration,fk,cfg['tcp_offset_mm'])
             planner=None;scene=None;items=[];selected=None;plan=None
             emit('ready',blockers=execution_blockers(cfg),products=len(store.products),
                  calibration=Path(cfg['calibration']).parent.name,mode=mode)
@@ -67,6 +70,7 @@ def main():
                     if time.monotonic()>deadline:raise ValueError(error or '等待新鲜且配对的RGB-D图像')
                     time.sleep(.02)
             def transform(frame):
+                if calibration is None:raise ValueError('请先完成307本机手眼标定，并在config/grasp.yaml中设置calibration路径；当前仅可识别录入')
                 q=robot.sample(frame['received'],stationary=True)
                 return q,camera_transform(calibration,fk,q,frame)
             def public_items():
@@ -95,16 +99,123 @@ def main():
                     action=cmd['action']
                     if action=='quit':break
                     if action=='prepare':
-                        plan=None;scene=None;items=[]
+                        from .prepare import checked_reset_plan
+                        plan=None;scene=None;items=[];selected=None
                         if planner is None:planner=Planner(cfg)
-                        result=planner.reset_plan(robot.sample(stationary=True))
+                        result=checked_reset_plan(planner,cfg,robot.sample(stationary=True))
                         atomic_json(root/'data/last_reset_plan.json',result)
-                        emit('reset_planned',request_id=ident,checked=result['checked_states'],blockers=reset_blockers(cfg))
+                        emit('reset_planned',request_id=ident,mode='hold_then_vr',blockers=reset_blockers(cfg))
                     elif action=='prepared':
                         receipt=json.loads((run/'prepare_result.json').read_text('utf-8'))
                         if receipt.get('status')!='prepared':raise ValueError('复位没有完成')
                         scene=None;items=[];plan=None
                         emit('prepared',request_id=ident)
+                    elif action=='demo_place':
+                        from .demo_config import validate,require_drink
+                        from .demo_surface import surfaces,fuse_stationary_depth,obstacle_boxes,retryable_surface_error
+                        from .demo_planning import plan_place,remove_robot_points
+                        from .demo_observation import plan_observation
+                        from .demo_protocol import check_base_anchor
+                        from .bottle import object_points
+                        context=json.loads((run/'demo_run.json').read_text())
+                        attempt_path=run/'observation_attempt.json'
+                        if attempt_path.exists():
+                            attempt=json.loads(attempt_path.read_text())
+                            observed_path=run/'demo_observe_result.json'
+                            observed=json.loads(observed_path.read_text()) if observed_path.exists() else {}
+                            if (attempt.get('run_id')!=context['run_id'] or observed.get('status')!='observed' or
+                                    observed.get('plan_id')!=attempt.get('plan_id')):
+                                raise ValueError('观察姿态尚未成功完成，不能继续放置')
+                        settings=validate(context['settings'])
+                        parent=run/('plan_'+context['grasp_plan_id']+'.json')
+                        grasp=json.loads(parent.read_text());require_drink(grasp['product'])
+                        result=json.loads((run/'demo_grasp_result.json').read_text())
+                        base=json.loads((run/'demo_base_result.json').read_text())
+                        if result.get('status')!='completed' or result.get('plan_id')!=grasp['plan_id'] or base.get('status')!='completed':
+                            raise ValueError('抓取或底盘阶段尚未成功，不能规划放置')
+                        emit('status',text='识别桌面与空闲放置区域…')
+                        if planner is None:planner=Planner(cfg)
+                        planner.cfg=dict(cfg)
+                        frames=[];environments=[];seen=set();deadline=time.monotonic()+5;first_q=None;base_anchor=robot.base_sample()
+                        while len(frames)<5 and time.monotonic()<deadline:
+                            if (run/'stop').exists():raise ValueError('用户停止演示')
+                            frame=snapshot(depth=True)
+                            if frame['frame_id'] in seen:time.sleep(.025);continue
+                            seen.add(frame['frame_id']);q,T=transform(frame)
+                            check_base_anchor(robot.base_sample(),base_anchor)
+                            if first_q is None:first_q=dict(q)
+                            elif any(abs(q[n]-first_q[n])>.4 for n in first_q):
+                                raise ValueError('识别桌面时关节发生移动，请停稳后重试')
+                            if frames and (not np.array_equal(frame['K'],frames[0]['K']) or not np.array_equal(frame['D'],frames[0]['D'])):
+                                raise ValueError('观察期间相机内参改变，请重试')
+                            ground=fk.fk('Link_Zero_Point',TORSO,q)
+                            depth=frame['depth'].astype(float)*cfg['depth_scale_m']
+                            mask=np.isfinite(depth)&(depth>.25)&(depth<1.8)
+                            cloud,_,_=object_points(frame,mask,ground@T,cfg)
+                            environment=remove_robot_points(planner,q,tcp,grasp['product'],cloud)
+                            frames.append(frame);environments.append(environment)
+                        if len(frames)<5:raise ValueError('未获得五帧新鲜且停稳的桌面深度')
+                        fused={**frame,'depth':fuse_stationary_depth([f['depth'] for f in frames],cfg['depth_scale_m'])}
+                        cloud,_,_=object_points(fused,fused['depth']>0,ground@T,cfg)
+                        environment=remove_robot_points(planner,q,tcp,grasp['product'],cloud)
+                        diag={'frame_ids':[int(f['frame_id']) for f in frames],'method':'stationary_pixel_median_5'}
+                        cfg['up_torso']=(ground[:3,:3].T@np.array([0.,0.,1.])).tolist()
+                        planner.cfg=dict(cfg)
+                        event='place_planned';table=None
+                        try:
+                            points,table=surfaces(environment,settings,grasp['product']['diameter_m']/2,diag)
+                            table['obstacles']=obstacle_boxes(environment,table,frames=environments)
+                            emit('status',text='检查放置、松爪与空手收回路径…')
+                            plan=plan_place(planner,q,tcp,grasp,points,table,settings)
+                        except ValueError as exc:
+                            diag['reason']=str(exc)
+                            cv2.imwrite(str(run/'table_failure.jpg'),frame['image'])
+                            np.savez_compressed(run/'table_failure.npz',environment=environment,
+                                                obstacle_environment=np.concatenate(environments),
+                                                frame_point_counts=np.array([len(v) for v in environments]))
+                            refresh=int(cmd.get('_place_refresh',0))
+                            diag['fresh_retry']=refresh
+                            if retryable_surface_error(exc,refresh) and not (run/'stop').exists():
+                                emit('status',text=f'桌面深度有波动，重新确认空位（{refresh+1}/2）…')
+                                commands.put_nowait({**cmd,'_place_refresh':refresh+1})
+                                continue
+                            attempt=run/'observation_attempt.json'
+                            if attempt.exists():raise ValueError('已调整观察姿态，仍无法放置：'+str(exc)) from exc
+                            if table is None:
+                                if not all(k in diag for k in ('coef','minimum','maximum','plane_points')) or np.linalg.norm(diag['coef'][:2])>np.tan(np.deg2rad(8)):
+                                    raise
+                                table={k:diag[k] for k in ('coef','minimum','maximum')}
+                                table['obstacles']=obstacle_boxes(environment,table,frames=environments)
+                            held=result.get('q',{}).get('Joint_Left_Gripper')
+                            if held is None or abs(q['Joint_Left_Gripper']-held)>8:
+                                raise ValueError('夹爪状态与抓取结束时不同，不能自动抬手；请重新开始本轮演示') from exc
+                            if (run/'stop').exists():raise ValueError('用户停止演示')
+                            a,b,c=table['coef'];lo=table['minimum'];hi=table['maximum']
+                            corners=np.array([[x,y,a*x+b*y+c] for x in (lo[0],hi[0]) for y in (lo[1],hi[1])])
+                            camera_ground=ground@T;cam=corners@np.linalg.inv(camera_ground)[:3,:3].T+np.linalg.inv(camera_ground)[:3,3]
+                            if np.any(cam[:,2]<=.05):raise ValueError('桌面投影不可靠，请调整观察角度')
+                            uv=cv2.projectPoints(cam,np.zeros(3),np.zeros(3),frame['K'],frame['D'])[0][:,0,:]
+                            h,w=frame['image'].shape[:2];roi=[max(0.,uv[:,0].min()),max(0.,uv[:,1].min()),min(w,uv[:,0].max()),min(h,uv[:,1].max())]
+                            emit('status',text='持瓶遮挡或路径受限，检查一次轻抬观察姿态…')
+                            plan=plan_observation(planner,q,tcp,grasp,table,{'T':camera_ground,'K':frame['K'],'D':frame['D']},roi)
+                            event='observe_planned'
+                        finally:
+                            atomic_json(run/'table_diagnostics.json',diag)
+                            atomic_json(run/'place_diagnostics.json',getattr(planner,'place_diagnostics',[]))
+                        plan.update(config=dict(cfg),plan_id=uuid.uuid4().hex,run_id=run.name,
+                            parent_plan_id=grasp['plan_id'],demo_settings=settings,
+                            calibration_sha256=calibration_sha,tcp_offset_mm=cfg['tcp_offset_mm'],created_monotonic=time.monotonic(),base_anchor=base_anchor)
+                        filename='place_'+plan['plan_id']+'.json';atomic_json(run/filename,plan)
+                        if event=='observe_planned':
+                            atomic_json(run/'observation_attempt.json',{'plan_id':plan['plan_id'],'run_id':context['run_id']})
+                            emit(event,request_id=ident,filename=filename,plan_id=plan['plan_id'],product_id=plan['product']['id'])
+                            continue
+                        camera_point=np.linalg.inv(T)@np.r_[plan['center'],1.]
+                        pixels=cv2.projectPoints(camera_point[:3].reshape(1,3),np.zeros(3),np.zeros(3),frame['K'],frame['D'])[0][:,0,:].tolist() if camera_point[2]>0 else []
+                        cv2.imwrite(str(run/'scene.jpg'),frame['image'])
+                        emit('place_planned',request_id=ident,filename=filename,plan_id=plan['plan_id'],
+                             product_id=plan['product']['id'],pixels=pixels,shape=list(frame['image'].shape),
+                             table_height=table['coef'][2],seconds=plan['seconds'])
                     elif action in ('scan','set_mode'):
                         if action=='set_mode':
                             if cmd['mode'] not in ('all','beverages'):raise ValueError('识别模式无效')
@@ -115,11 +226,12 @@ def main():
                         store.reload();items,elapsed=perception.infer(scene,store,mode)
                         cv2.imwrite(str(run/'scene.jpg'),scene['image'])
                         emit('scene',request_id=ident,items=public_items(),shape=list(scene['image'].shape),elapsed_ms=elapsed,mode=mode)
-                    elif action in ('catalog','update_product','remove_sample'):
+                    elif action in ('catalog','update_product','remove_sample','remove_product'):
                         store.reload()
                         if action=='update_product':store.update(cmd['product_id'],**cmd['values'])
                         elif action=='remove_sample':store.remove_example(cmd['product_id'],cmd['index'])
-                        plan=None;refresh_items()
+                        elif action=='remove_product':store.remove_product(cmd['product_id'])
+                        plan=None;selected=None;refresh_items()
                         emit('catalog',request_id=ident,products=catalog(),items=public_items(),product_id=cmd.get('product_id'))
                     elif action=='enroll':
                         item=next(v for v in items if v['id']==int(cmd['id']))
@@ -138,7 +250,7 @@ def main():
                         plan=None
                         emit('enrolled',request_id=ident,text='袋口夹取点已设置；请先预览路径',items=public_items(),select_id=item['id'])
                     elif action=='plan':
-                        plan=None
+                        plan=None;request_started=time.monotonic()
                         chosen=next(v for v in items if v['id']==int(cmd['id']))
                         if chosen['product'] is None:raise ValueError('先为选中的饮料录入商品信息')
                         emit('status',text='重新识别目标并检查深度…')
@@ -147,6 +259,7 @@ def main():
                         selected=next((v for v in fresh if v['id']==chosen['id']),None)
                         if selected is None or selected['product'] is None or selected['product']['id']!=chosen['product']['id']:
                             raise ValueError('选中目标已变化，请重新识别并选择')
+                        recognition_finished=time.monotonic()
                         shape=selected['product'].get('geometry','cylinder');grasp_pixel=None
                         if shape=='bag_edge':
                             fraction=chosen.get('grasp_fraction')
@@ -183,9 +296,16 @@ def main():
                         geometry.update(correction)
                         atomic_json(root/'data/last_geometry.json',{'center':center.tolist(),'up_torso':up.tolist(),**geometry})
                         emit('status',text='检查预抓取 → 抓取 → 抬起 → 收回…')
+                        depth_finished=time.monotonic()
                         if planner is None:planner=Planner(cfg)
                         planner.cfg=dict(cfg)
-                        plan=planner.plan(q,tcp,center,selected['product'])
+                        planning_started=time.monotonic()
+                        plan=planner.plan(q,tcp,center,planning_product(selected['product'],geometry))
+                        plan['timing_seconds']={'recognition':round(recognition_finished-request_started,3),
+                            'depth':round(depth_finished-recognition_finished,3),
+                            'model_load':round(planning_started-depth_finished,3),
+                            'planning':round(time.monotonic()-planning_started,3),
+                            'total':round(time.monotonic()-request_started,3)}
                         plan['calibration']=cfg['calibration'];plan['created_monotonic']=time.monotonic()
                         if hashlib.sha256(Path(cfg['calibration']).read_bytes()).hexdigest()!=calibration_sha:
                             raise ValueError('标定文件已改变，请重开抓取程序')
@@ -208,10 +328,13 @@ def main():
                         emit('planned',request_id=ident,center=center.tolist(),pixels=pixels,shape=list(frame['image'].shape),
                              plan_id=plan['plan_id'],filename=filename,prepare_token=plan['prepare_token'],
                              target={'instance_id':selected['id'],'product_id':selected['product']['id'],'name':selected['name']},
-                             orientation_mode=plan['orientation_mode'],orientation_deviation=plan['max_orientation_deviation_deg'],
+                             orientation_mode=plan['orientation_mode'],orientation_deviation=plan['max_grasp_orientation_deviation_deg'],
                              approach_yaw_deg=plan['approach_yaw_deg'],
-                             withdraw_yaw_deg=plan.get('withdraw_yaw_deg',0.),
-                             seconds=plan['seconds'],checked=plan['checked_states'],
+                             withdraw_orientation_mode=plan.get('withdraw_orientation_mode'),
+                             carry_protocol_version=plan.get('carry_protocol_version'),
+                             max_withdraw_tilt_deg=plan.get('max_withdraw_tilt_deg',0.),
+                             seconds=round(time.monotonic()-request_started,2),planning_seconds=plan['seconds'],
+                             checked=plan['checked_states'],
                              blockers=execution_blockers(cfg)+([] if plan['prepare_token'] else ['复位尚未成功，请先复位并准备']))
                     else:raise ValueError('未知操作')
                 except Exception as exc:

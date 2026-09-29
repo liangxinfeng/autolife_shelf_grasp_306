@@ -9,8 +9,8 @@ from autolife_shelf_grasp_306.camera import Camera
 from autolife_shelf_grasp_306.robot import Robot
 from autolife_shelf_grasp_306.perception import Perception
 from autolife_shelf_grasp_306.core import ProductStore,depth_cloud
-from autolife_handeye_calibration_306.core import Kinematics
-from autolife_handeye_calibration_306.verification_core import camera_transform
+from autolife_handeye_calibration_307.core import Kinematics
+from autolife_handeye_calibration_307.verification_core import camera_transform
 
 root=Path('/home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306');cfg=yaml.safe_load((root/'config/grasp.yaml').read_text())
 data=json.loads(Path(cfg['calibration']).read_text());fk=Kinematics(cfg['urdf_path'])

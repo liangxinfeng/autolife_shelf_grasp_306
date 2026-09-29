@@ -6,8 +6,14 @@
   <license>Proprietary</license>
   <buildtool_depend>ament_python</buildtool_depend>
   <exec_depend>rclpy</exec_depend><exec_depend>std_msgs</exec_depend>
-  <exec_depend>autolife_handeye_calibration_306</exec_depend>
+  <exec_depend>autolife_handeye_calibration_307</exec_depend>
   <exec_depend>control_center_joint_control</exec_depend>
+  <exec_depend>control_center_chassis_guard</exec_depend>
+  <exec_depend>control_center_navigation</exec_depend>
+  <exec_depend>nav2_msgs</exec_depend><exec_depend>std_srvs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend><exec_depend>python3-opencv</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend><exec_depend>nav_msgs</exec_depend>
+  <exec_depend>action_msgs</exec_depend><exec_depend>python3-redis</exec_depend>
   <exec_depend>openarmx_teleop_vr_306_v4</exec_depend>
   <exec_depend>python3-pyqt5</exec_depend><exec_depend>python3-yaml</exec_depend>
   <export><build_type>ament_python</build_type></export>

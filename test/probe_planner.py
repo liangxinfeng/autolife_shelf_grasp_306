@@ -5,7 +5,7 @@ import yaml
 import numpy as np
 from scipy.spatial.transform import Rotation
 from autolife_shelf_grasp_306.planning import Planner
-from autolife_handeye_calibration_306.core import ARMS,BODY,NECK
+from autolife_handeye_calibration_307.core import ARMS,BODY,NECK
 
 root=Path('/home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306')
 cfg=yaml.safe_load((root/'config/grasp.yaml').read_text())

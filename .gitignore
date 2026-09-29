@@ -17,3 +17,9 @@ sessions/
 *.db3
 *.mcap
 *.bak
+
+# Local-only files excluded from the robot307 publication
+.map_trash/
+.map_backups/
+.zcode_backups/
+*.pre-*

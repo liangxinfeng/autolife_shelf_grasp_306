@@ -5,7 +5,7 @@ import numpy as np
 import yaml
 from autolife_shelf_grasp_306.bottle import estimate
 from autolife_shelf_grasp_306.planning import Planner
-from autolife_handeye_calibration_306.verification_core import load_geometry
+from autolife_handeye_calibration_307.verification_core import load_geometry
 
 root=Path('/home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306')
 cfg=yaml.safe_load((Path(__file__).parents[1]/'config/grasp.yaml').read_text())

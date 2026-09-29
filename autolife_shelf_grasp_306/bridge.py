@@ -1,6 +1,6 @@
 """Grasp-only bridge: distinguish settled streaming goals from stalled motors."""
 import time
-from autolife_handeye_calibration_306.bridge import CalibrationBridge
+from autolife_handeye_calibration_307.bridge import CalibrationBridge
 
 
 class GraspBridge(CalibrationBridge):

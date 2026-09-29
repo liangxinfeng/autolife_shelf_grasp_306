@@ -19,7 +19,7 @@ def horizontal_basis(up,yaw=0.):
 
 
 def object_points(frame,mask,T,cfg):
-    from autolife_handeye_calibration_306.depth_target import aligned_depth
+    from autolife_handeye_calibration_307.depth_target import aligned_depth
     if frame.get('depth') is None:raise ValueError('等待同帧深度')
     aligned_depth(frame['image'],frame['depth'],frame['frame_id'],frame['depth_id'],frame['intrinsics'],frame['depth_intrinsics'])
     if mask.shape!=frame['depth'].shape:raise ValueError('分割与深度尺寸不同')
@@ -28,8 +28,10 @@ def object_points(frame,mask,T,cfg):
     y,x=np.where(mask)
     if len(x)<100:raise ValueError('分割区域过小')
     h,w=mask.shape
-    if x.min()<2 or y.min()<2 or x.max()>w-3 or y.max()>h-3:raise ValueError('请把瓶子完整放入视野')
     safe=cv2.erode(mask.astype(np.uint8),np.ones((3,3),np.uint8)).astype(bool)
+    # Cropped objects are allowed; omit image-edge depth rather than rejecting
+    # the entire visible object or padding unobserved pixels with fake geometry.
+    safe[:2,:]=False;safe[-2:,:]=False;safe[:,:2]=False;safe[:,-2:]=False
     rows,cols=np.where(safe);rows,cols=rows[::2],cols[::2]
     z=frame['depth'][rows,cols].astype(float)*cfg['depth_scale_m']
     lo,hi=cfg['depth_range_m'];valid=np.isfinite(z)&(z>=lo)&(z<=hi)
@@ -45,7 +47,7 @@ def object_points(frame,mask,T,cfg):
 def center_from_points(points,up,product,camera):
     """Robust known-radius cylinder fit + observed vertical midpoint.
 
-    Height is a completeness sanity check, never an invented table offset.
+    Recorded height is reference-only; target height is the visible midpoint.
     Neck/cap points are excluded from the radius fit but used for vertical extent.
     """
     p=np.asarray(points,float);u,v,n=horizontal_basis(up)
@@ -73,10 +75,10 @@ def center_from_points(points,up,product,camera):
     if np.dot(fit.x-middle,away)<r*.15:raise DepthQualityError('瓶身中心方向不确定')
     inliers=np.linalg.norm(xy-fit.x,axis=1)<r+.010
     low,high=np.percentile(z[inliers],[.5,99.5]);span=high-low
-    if not height*.75<=span<=height*1.20:
-        raise DepthQualityError(f'瓶身可见高度约{span*1000:.0f}mm，与录入{height*1000:.0f}mm不符；请露出完整瓶身或修正高度')
+    if span<.025:raise DepthQualityError('可见瓶身有效深度高度不足25mm，无法稳定确定夹取中心')
     center=fit.x[0]*u+fit.x[1]*v+(low+high)*.5*n
     stats={'observed_height_mm':float(span*1000),'height_source':'visible_bottle_midpoint',
+           'reference_height_mm':height*1000,
            'radius_m':r,'cylinder_median_mm':float(np.median(err)*1000),'points':len(p)}
     return center,stats,inliers
 
@@ -86,8 +88,34 @@ def estimate(frame,mask,T,up,product,cfg):
     center,stats,keep=center_from_points(points,up,product,T[:3,3])
     ys=pixels[keep,1];y0,y1=bounds;span=max(1,y1-y0)
     if len(ys)<80 or np.percentile(ys,1)>y0+span*.12 or np.percentile(ys,99)<y1-span*.12:
-        raise DepthQualityError('瓶顶或瓶底缺少有效深度，请完整露出瓶身后重试')
+        raise DepthQualityError('当前可见区域的上下边缘深度缺失过多，无法稳定确定可见部分中心')
+    stats['image_cropped']=image_cropped(mask)
     return center,stats
+
+
+def image_cropped(mask):
+    return bool(np.any(mask[:2]) or np.any(mask[-2:]) or np.any(mask[:,:2]) or np.any(mask[:,-2:]))
+
+
+def planning_product(product,geometry):
+    """Do not overwrite the catalog or shrink the unseen carried-object volume.
+
+    Full-view objects use measured height. For image-cropped objects, catalog
+    height remains only a conservative hidden-extent estimate for collisions;
+    it never moves the measured visible midpoint or blocks height mismatch.
+    """
+    result=dict(product)
+    if product.get('geometry','cylinder')=='bag_edge':return result
+    observed=float(geometry['observed_height_mm'])/1000.
+    if not np.isfinite(observed) or observed<.025:raise ValueError('可见高度无效')
+    result['reference_height_m']=product['height_m']
+    result['height_m']=observed
+    # A clipped top/bottom may put the grasp point away from the whole object's
+    # midpoint. Bound that asymmetry instead of assuming symmetric half-height.
+    if geometry.get('image_cropped'):
+        result['collision_height_m']=observed+2*max(0.,product['height_m']-observed)
+    else:result['collision_height_m']=observed
+    return result
 
 
 def combine(samples):
@@ -98,4 +126,6 @@ def combine(samples):
     shape=samples[0][1].get('geometry','cylinder')
     return center,{'source':'bottle_only_rgbd' if shape=='cylinder' else shape+'_rgbd','frames':len(samples),'center_spread_mm':spread*1000,
                   'observed_height_mm':float(np.median([s[1]['observed_height_mm'] for s in samples])),
+                  'height_source':samples[0][1].get('height_source','visible_midpoint'),
+                  'image_cropped':any(s[1].get('image_cropped',False) for s in samples),
                   'support_required':False}

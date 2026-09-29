@@ -11,7 +11,7 @@ from autolife_shelf_grasp_306.robot import Robot
 from autolife_shelf_grasp_306.perception import Perception
 from autolife_shelf_grasp_306.core import ProductStore,match
 from autolife_shelf_grasp_306.planning import Planner
-from autolife_handeye_calibration_306.verification_core import camera_transform,load_geometry
+from autolife_handeye_calibration_307.verification_core import camera_transform,load_geometry
 
 root=Path('/home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306')
 cfg=yaml.safe_load((root/'config/grasp.yaml').read_text());rclpy.init(args=[])

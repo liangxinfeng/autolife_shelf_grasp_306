@@ -124,6 +124,15 @@ class ProductStore:
         p['examples'].pop(index);p['features'].pop(index);self.save(products)
         return p
 
+    def remove_product(self,product_id):
+        self.reload()
+        removed=next((p for p in self.products if p['id']==product_id),None)
+        if removed is None:raise ValueError('商品已不存在，请刷新商品库')
+        # save() archives the full previous catalog; sample files stay available
+        # for recovery but are no longer referenced or matched in either mode.
+        self.save([copy.deepcopy(p) for p in self.products if p['id']!=product_id])
+        return removed
+
 
 def product_category(product):
     # Original bottle-only records predate geometry/category fields.
@@ -141,7 +150,7 @@ def crop_object(image, mask):
 
 def depth_cloud(frame, mask, config, step=2):
     """Same-frame aligned depth only; no fill of unknown/transparent surfaces."""
-    from autolife_handeye_calibration_306.depth_target import aligned_depth
+    from autolife_handeye_calibration_307.depth_target import aligned_depth
     if frame.get('depth') is None: raise ValueError(frame.get('depth_error','等待深度'))
     aligned_depth(frame['image'], frame['depth'],frame['frame_id'],frame['depth_id'],
                   frame['intrinsics'],frame['depth_intrinsics'])

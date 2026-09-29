@@ -7,7 +7,7 @@ from scipy.optimize import least_squares
 from scipy.spatial.transform import Rotation
 from autolife_shelf_grasp_306.planning import Planner
 from autolife_shelf_grasp_306.bottle import estimate,horizontal_basis
-from autolife_handeye_calibration_306.verification_core import load_geometry
+from autolife_handeye_calibration_307.verification_core import load_geometry
 
 root=Path('/home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306')
 cfg=yaml.safe_load((root/'config/grasp.yaml').read_text());p=Planner(cfg)
