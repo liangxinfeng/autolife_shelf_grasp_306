@@ -27,6 +27,22 @@ def test_delete_removes_matching_feature_and_keeps_recoverable_image(tmp_path):
     assert match([1,0],s.products)['id'] is None
 
 
+def test_delete_whole_product_persists_and_keeps_other_products_and_history(tmp_path):
+    s=ProductStore(tmp_path);im=np.zeros((25,25,3),np.uint8)
+    a=s.add('水',50,180,[1,0],im);b=s.add('茶',50,180,[0,1],im)
+    s.remove_product(a['id'])
+    loaded=ProductStore(tmp_path)
+    assert [p['id'] for p in loaded.products]==[b['id']]
+    assert match([1,0],loaded.products)['id'] is None
+    assert (tmp_path/a['examples'][0]).is_file()
+    assert any(any(p['id']==a['id'] for p in json.loads(f.read_text())['products'])
+               for f in (tmp_path/'history').glob('*.json'))
+    unchanged=s.path.read_bytes()
+    with pytest.raises(ValueError):s.remove_product(a['id'])
+    assert s.path.read_bytes()==unchanged
+    s.remove_product(b['id']);assert ProductStore(tmp_path).products==[]
+
+
 def test_invalid_edit_does_not_change_file(tmp_path):
     s=ProductStore(tmp_path);im=np.zeros((25,25,3),np.uint8)
     a=s.add('甲',50,80,[1,0],im);s.add('乙',50,80,[0,1],im)
@@ -48,6 +64,8 @@ def test_drink_mode_skips_generic_inference():
         def predict(self,*args,**kwargs):self.calls.append(kwargs);return [SimpleNamespace(masks=None)]
     p=Perception.__new__(Perception);p.yolo=Detector();p.generic=Detector();p.device='cpu'
     p.cfg=dict(image_size=640,confidence=.3,classes=[24,39],match_threshold=.72,match_margin=.06)
+    # __new__ bypasses detector initialization; provide its class-index map.
+    p.mode_classes={'beverages':[39,40,41],'all':p.cfg['classes']}
     p.previous=[];p.counter=0
     frame={'image':np.zeros((30,30,3),np.uint8)};store=SimpleNamespace(products=[])
     p.infer(frame,store,'beverages');assert p.yolo.calls[-1]['classes']==[39,40,41] and not p.generic.calls
@@ -66,6 +84,7 @@ def test_modes_share_same_sku_dimensions_and_samples():
     p=Perception.__new__(Perception);p.yolo=SimpleNamespace(predict=lambda *a,**k:[detected])
     p.generic=SimpleNamespace(predict=lambda *a,**k:[SimpleNamespace(masks=None)])
     p.cfg=dict(image_size=640,confidence=.3,classes=[39],match_threshold=.72,match_margin=.06)
+    p.mode_classes={'beverages':[39,40,41],'all':p.cfg['classes']}
     p.device='cpu';p.previous=[];p.counter=0;p.embed=lambda crops:np.array([[1.,0.] for c in crops])
     product=dict(id='shared',name='饮料',diameter_m=.05,height_m=.08,category='general',features=[[1.,0.]],examples=['test.jpg'])
     store=SimpleNamespace(products=[product]);frame={'image':np.zeros((30,30,3),np.uint8)}

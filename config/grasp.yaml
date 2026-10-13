@@ -4,15 +4,23 @@ python: /home/ubuntu/miniconda3/envs/robot_env/bin/python
 vendor_python_path: /home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages
 urdf_path: /home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/urdfs/robot_v2_2.urdf
 calibration: /home/ubuntu/ros2_ws/src/autolife_handeye_calibration_306/sessions/20260915_135708_706046/session.json
-yolo_weights: /home/ubuntu/ros2_ws/src/adaptive_object_grasping/models/yolo/yolo11n-seg.pt
+# Independent right-arm test result; left calibration above is unchanged.
+right_calibration: /home/ubuntu/ros2_ws/src/autolife_handeye_calibration_306/sessions/20261012_172415_700141/session.json
+detector_backend: grounded_sam2
+grounding_dino_model: models/grounding-dino-tiny
+sam2_model: models/sam2.1-hiera-tiny
+grounded_box_threshold: 0.35
+grounded_text_threshold: 0.20
+sam2_mask_quality: 0.50
 dino_repo: models/dinov2
 dino_weights: models/dinov2_vits14_pretrain.pth
-generic_weights: models/FastSAM-s.pt
 device: cuda:0
 image_size: 640
 confidence: 0.30
-# Preferred YOLO food/container/bag masks; FastSAM supplies class-agnostic proposals.
-classes: [24, 26, 39, 40, 41, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55]
+# UI accepts known Chinese names and English phrases; product brands use DINOv2.
+grounded_sam2_prompts:
+  beverages: 'bottle. beverage can. cup.'
+  all: 'bottle. cup. can. bag. box. watermelon.'
 recognition_hz: 3.0
 match_threshold: 0.72
 match_margin: 0.06
@@ -31,17 +39,23 @@ orientation_relax_deg: 30.0
 pregrasp_m: 0.12
 lift_m: 0.035
 withdraw_m: 0.20
+fixed_carry_enabled: true
+# One continuous checked return to initial_pose_deg.left_arm, without opening jaws.
+carry_return_mode: continuous_reset
+carry_max_tilt_deg: 45.0
 # No support plane is estimated. Up is computed from current URDF kinematics.
 gripper_max_width_m: 0.095
 gripper_open_deg: 10.0
 gripper_open_tolerance_deg: 4.0
 gripper_closed_deg: 330.0
-# Same initial joints as handeye306's VR-derived reset; both jaws fully open.
+# Arms/neck from robot283_full_20260924 vendor system HOME (2026-09-22 saved pose).
+# Only reset targets are imported; retain 306 calibration, joint limits and speeds.
+# Both jaws fully open, as before.
 # Waist/legs stay at their measured pose. This is not a vendor full-body HOME.
 initial_pose_deg:
-  left_arm: [0.0, 0.0, 0.0, 110.0, 0.0, 13.0, 0.0]
-  right_arm: [0.0, 0.0, 0.0, -110.0, 0.0, -13.0, 0.0]
-  neck: [0.0, -20.0, 0.0]
+  left_arm: [40.000651, 0.010986, 10.008402, 129.99937, -0.010928, 0.010928, -0.010928]
+  right_arm: [-40.000651, -0.010986, -9.98643, -129.99937, 0.032785, -0.010928, -0.010928]
+  neck: [0.010928, -29.998649, 0.010928]
 require_reset_before_grasp: true
 reset_hardware_enabled: true
 reset_joint_speed_deg_s: 70.2
@@ -52,6 +66,8 @@ gripper_speed_scale: 0.5
 max_joint_speed_deg_s: 120.0
 max_joint_acceleration_deg_s2: 720.0
 grasp_feedback_lead_deg: 3.0
+# Faster free-arm transit; close approach / placement retain the 3 degree bound.
+grasp_transit_feedback_lead_deg: 5.0
 # Reuse guarded VR position SYNC for grasp only; reset retains its current path.
 use_position_sync_session: true
 plan_ttl_sec: 20.0
