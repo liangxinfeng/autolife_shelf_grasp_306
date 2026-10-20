@@ -8,6 +8,7 @@ logs/
 data/
 models/
 sessions/
+backup*/
 *.log
 .env
 *.pt

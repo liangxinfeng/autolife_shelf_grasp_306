@@ -1,47 +1,78 @@
-robot_id: 306
+robot_id: 300
 arm: left
-python: /home/ubuntu/miniconda3/envs/robot_env/bin/python
+python: /home/ubuntu/ros2_ws/venvs/grasp_runtime/bin/python
 vendor_python_path: /home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages
 urdf_path: /home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/urdfs/robot_v2_2.urdf
-calibration: /home/ubuntu/ros2_ws/src/autolife_handeye_calibration_306/sessions/20260915_135708_706046/session.json
-yolo_weights: /home/ubuntu/ros2_ws/src/adaptive_object_grasping/models/yolo/yolo11n-seg.pt
+calibration: /home/ubuntu/ros2_ws/src/autolife_handeye_calibration_306/sessions/300_current/session.json
+right_calibration: ''
+detector_backend: grounded_sam2
+grounding_dino_model: models/grounding-dino-tiny
+sam2_model: models/sam2.1-hiera-tiny
+grounded_box_threshold: 0.35
+grounded_text_threshold: 0.2
+sam2_mask_quality: 0.5
 dino_repo: models/dinov2
 dino_weights: models/dinov2_vits14_pretrain.pth
-generic_weights: models/FastSAM-s.pt
 device: cuda:0
 image_size: 640
-confidence: 0.30
-# Preferred YOLO food/container/bag masks; FastSAM supplies class-agnostic proposals.
-classes: [24, 26, 39, 40, 41, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55]
+confidence: 0.3
+grounded_sam2_prompts:
+  beverages: bottle. beverage can. cup.
+  all: bottle. cup. can. bag. box. watermelon.
 recognition_hz: 3.0
 match_threshold: 0.72
 match_margin: 0.06
 depth_scale_m: 0.001
-depth_range_m: [0.20, 1.8]
-head_offsets_deg: [0.0, 0.0, 0.0]
+depth_range_m:
+- 0.2
+- 1.8
+head_offsets_deg:
+- 0.0
+- 0.0
+- 0.0
 tcp_offset_mm: 15.0
-# Link_Waist_Yaw_to_Shoulder_Inner: +Y is toward robot's RIGHT shoulder.
-# Previous +30mm plus user's additional -15mm = final +15mm to robot right.
-# Independent of head/camera/wrist orientation and the 15mm marker->TCP offset.
-target_offset_torso_mm: [0.0, 15.0, 0.0]
-# Mechanical tool orientation: tool X approaches; tool Y closes horizontally; Z up.
-T_wrist_tool_quat_xyzw: [-0.70710678, 0.0, 0.0, 0.70710678]
+target_offset_torso_mm:
+- 0.0
+- 0.0
+- 0.0
+T_wrist_tool_quat_xyzw:
+- -0.70710678
+- 0.0
+- 0.0
+- 0.70710678
 approach_yaw_deg: 0.0
 orientation_relax_deg: 30.0
 pregrasp_m: 0.12
 lift_m: 0.035
-withdraw_m: 0.20
-# No support plane is estimated. Up is computed from current URDF kinematics.
+withdraw_m: 0.2
+fixed_carry_enabled: true
+carry_return_mode: continuous_reset
+carry_max_tilt_deg: 45.0
 gripper_max_width_m: 0.095
 gripper_open_deg: 10.0
 gripper_open_tolerance_deg: 4.0
 gripper_closed_deg: 330.0
-# Same initial joints as handeye306's VR-derived reset; both jaws fully open.
-# Waist/legs stay at their measured pose. This is not a vendor full-body HOME.
 initial_pose_deg:
-  left_arm: [0.0, 0.0, 0.0, 110.0, 0.0, 13.0, 0.0]
-  right_arm: [0.0, 0.0, 0.0, -110.0, 0.0, -13.0, 0.0]
-  neck: [0.0, -20.0, 0.0]
+  left_arm:
+  - 47.009828900303596
+  - 0.4064883545947806
+  - -0.09887554571229344
+  - 139.99678655680512
+  - 0.18578398026291218
+  - -4.972453589389708
+  - -0.01092846942723013
+  right_arm:
+  - -46.98785655681197
+  - -0.1208478892039142
+  - -0.010986171745810382
+  - -139.99678655680512
+  - -0.01092846942723013
+  - 0.12021316369953142
+  - -0.14207010255399166
+  neck:
+  - 0.01092846942723013
+  - -30.020505516601265
+  - -2.6119041931080007
 require_reset_before_grasp: true
 reset_hardware_enabled: true
 reset_joint_speed_deg_s: 70.2
@@ -52,14 +83,40 @@ gripper_speed_scale: 0.5
 max_joint_speed_deg_s: 120.0
 max_joint_acceleration_deg_s2: 720.0
 grasp_feedback_lead_deg: 3.0
-# Reuse guarded VR position SYNC for grasp only; reset retains its current path.
+grasp_transit_feedback_lead_deg: 5.0
 use_position_sync_session: true
 plan_ttl_sec: 20.0
-# No automatic hardware enable on startup. These remain false until measured.
 hardware_execution: true
-# User-authorized supervised experiment, NOT a claim of calibration acceptance.
 supervised_experiment: true
 camera_tcp_validated: false
 gripper_mapping_validated: false
 tool_orientation_validated: false
 external_scene_validated: false
+yolo_weights: /home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306/models/yolo11n-seg.pt
+generic_weights: models/FastSAM-s.pt
+classes:
+- 24
+- 26
+- 39
+- 40
+- 41
+- 46
+- 47
+- 48
+- 49
+- 50
+- 51
+- 52
+- 53
+- 54
+- 55
+carry_pose_deg:
+- 47.009828900303596
+- 0.4064883545947806
+- -0.09887554571229344
+- 139.99678655680512
+- 0.18578398026291218
+- -4.972453589389708
+- -0.01092846942723013
+reset_pose_source: robot_system
+allow_system_geometry_fallback: true

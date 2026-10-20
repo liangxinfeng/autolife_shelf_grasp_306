@@ -7,7 +7,7 @@ from autolife_shelf_grasp_306.planning import Planner
 from autolife_handeye_calibration_306.verification_core import load_geometry
 
 cfg=yaml.safe_load((Path(__file__).parents[1]/'config/grasp.yaml').read_text())
-f=np.load('/tmp/shelf306_support_fixture.npz');m=json.loads(str(f['meta']))
+f=np.load('/tmp/shelf300_support_fixture.npz');m=json.loads(str(f['meta']))
 cfg['up_torso']=f['up'].tolist();p=Planner(cfg);q=p.reset_plan(m['q'])['end_q']
 tcp=load_geometry(json.loads(Path(cfg['calibration']).read_text()),p.fk,cfg['tcp_offset_mm'])
 for x,y,z in [(.737,-.152,-.096),(.737,-.031,-.075),(.65,-.30,-.15),(.72,-.3,-.15),(.76,-.3,-.10),(.70,-.45,-.15),(.65,-.4,-.25),(.70,-.1,-.30)]:

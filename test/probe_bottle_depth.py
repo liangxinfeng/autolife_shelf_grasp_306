@@ -14,7 +14,7 @@ from autolife_handeye_calibration_306.verification_core import camera_transform
 
 root=Path('/home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306');cfg=yaml.safe_load((root/'config/grasp.yaml').read_text())
 data=json.loads(Path(cfg['calibration']).read_text());fk=Kinematics(cfg['urdf_path'])
-rclpy.init(args=[]);robot=Robot();camera=Camera(cfg,'/tmp/shelf306_depth_probe.jpg')
+rclpy.init(args=[]);robot=Robot();camera=Camera(cfg,'/tmp/shelf300_depth_probe.jpg')
 try:
     model=Perception(cfg,root);store=ProductStore(root/'data');samples=[];seen=set();deadline=time.monotonic()+8
     while len(samples)<5 and time.monotonic()<deadline:
@@ -34,6 +34,6 @@ try:
     centers=np.array([v['median_surface_torso_m'] for v in samples])
     result={'samples':samples,'surface_spread_mm':float(np.max(np.linalg.norm(centers-np.median(centers,axis=0),axis=1))*1000),
             'note':'可见表面，不是瓶子中心；未校验真实坐标精度；无任何运动'}
-    Path('/tmp/shelf306_bottle_depth.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
+    Path('/tmp/shelf300_bottle_depth.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
     print(json.dumps(result,ensure_ascii=False,indent=2))
 finally:camera.close();robot.close();rclpy.shutdown()

@@ -1,9 +1,39 @@
-"""YOLO11 instance masks + DINOv2-S/14 SKU retrieval; models loaded once."""
+"""Instance segmentation + unchanged DINOv2 SKU retrieval; models loaded once."""
 import time
 from pathlib import Path
 import cv2
 import numpy as np
 from .core import crop_object, match,product_category
+
+
+def model_paths(cfg, root):
+    """Resolve every local asset against the package, never the shell cwd."""
+    root = Path(root).expanduser().resolve()
+    defaults = {'generic_weights': 'models/FastSAM-s.pt',
+                'yoloe_text_encoder': 'models/mobileclip_blt.ts'}
+    grounded=cfg.get('detector_backend')=='grounded_sam2'
+    keys = ['dino_repo','dino_weights'] if grounded else ['yolo_weights', 'dino_repo', 'dino_weights', 'generic_weights']
+    if not grounded and (cfg.get('detector_backend') == 'yoloe' or 'yoloe' in str(cfg.get('yolo_weights', ''))):
+        keys.append('yoloe_text_encoder')
+    paths = {}
+    missing = []
+    for key in keys:
+        value = str(cfg.get(key, defaults.get(key, ''))).strip()
+        if not value:
+            missing.append(f'{key}: 未配置')
+            continue
+        p = Path(value).expanduser()
+        p = (p if p.is_absolute() else root / p).resolve()
+        check = p / 'hubconf.py' if key == 'dino_repo' else p
+        if not check.is_file() or check.stat().st_size == 0:
+            missing.append(f'{key}: {check}')
+        paths[key] = p
+    if missing:
+        raise ValueError('模型文件缺失或为空：\n' + '\n'.join(missing))
+    if grounded:
+        from .grounded_sam2 import local_model_paths
+        paths.update(local_model_paths(cfg,root))
+    return paths
 
 
 def duplicate_mask(mask,box,previous):
@@ -21,19 +51,16 @@ def duplicate_mask(mask,box,previous):
 class Perception:
     def __init__(self,cfg,root):
         import torch
-        from ultralytics import YOLO,FastSAM
         self.torch=torch;self.cfg=cfg
         self.device=cfg['device'];torch.set_num_threads(2)
         if self.device.startswith('cuda') and not torch.cuda.is_available():raise ValueError('CUDA不可用')
-        yolo=Path(cfg['yolo_weights']); repo=Path(root)/cfg['dino_repo'];weights=Path(root)/cfg['dino_weights']
-        if not yolo.is_file() or not weights.is_file() or not (repo/'hubconf.py').is_file():
-            raise ValueError('模型文件未完整安装')
-        self.yolo=YOLO(str(yolo))
-        self.yolo.predict(np.zeros((640,640,3),np.uint8),imgsz=cfg['image_size'],device=self.device,verbose=False)
-        generic=Path(root)/cfg.get('generic_weights','models/FastSAM-s.pt')
-        if not generic.is_file():raise ValueError('缺少通用物品分割模型 FastSAM-s.pt')
-        self.generic=FastSAM(str(generic))
-        self.generic.predict(np.zeros((640,640,3),np.uint8),imgsz=cfg['image_size'],device=self.device,verbose=False)
+        assets=model_paths(cfg,root)
+        self.segmenter=None
+        if cfg.get('detector_backend')=='grounded_sam2':
+            from .grounded_sam2 import GroundedSAM2
+            self.segmenter=GroundedSAM2(cfg,root)
+        else:self._load_legacy(assets)
+        repo=assets['dino_repo'];weights=assets['dino_weights']
         self.dino=torch.hub.load(str(repo),'dinov2_vits14',source='local',pretrained=False)
         self.dino.load_state_dict(torch.load(weights,map_location='cpu',weights_only=True),strict=True)
         self.dino=self.dino.eval().to(self.device)
@@ -41,6 +68,31 @@ class Perception:
         self.std=torch.tensor([.229,.224,.225],device=self.device)[None,:,None,None]
         self.embed([np.full((224,224,3),127,np.uint8)])
         self.previous=[];self.counter=0
+
+    def _load_legacy(self,assets):
+        """Explicit rollback backend only; not loaded by Grounded SAM 2."""
+        from ultralytics import YOLO,FastSAM
+        torch=self.torch;cfg=self.cfg;yolo=assets['yolo_weights']
+        self.yolo=YOLO(str(yolo))
+        self.mode_classes={'beverages':[39,40,41],'all':cfg['classes']}
+        if 'yoloe_text_encoder' in assets:
+            from ultralytics.nn.text_model import MobileCLIPTS
+            configured=cfg.get('yoloe_prompts',{})
+            by_mode={m:list(dict.fromkeys(str(x).strip() for x in configured.get(m,[]) if str(x).strip()))
+                     for m in ('beverages','all')}
+            if not all(by_mode.values()):
+                raise ValueError('YOLOE缺少beverages/all识别提示词配置')
+            names=list(dict.fromkeys(by_mode['all']+by_mode['beverages']))
+            self.yolo.to(self.device)
+            self.yolo.model.clip_model=MobileCLIPTS(torch.device(self.device),weight=str(assets['yoloe_text_encoder']))
+            embeddings=self.yolo.model.get_text_pe(names,cache_clip_model=True)
+            self.yolo.set_classes(names,embeddings)
+            del self.yolo.model.clip_model
+            self.mode_classes={m:[names.index(x) for x in by_mode[m]] for m in by_mode}
+        self.yolo.predict(np.zeros((640,640,3),np.uint8),imgsz=cfg['image_size'],device=self.device,verbose=False)
+        generic=assets['generic_weights']
+        self.generic=FastSAM(str(generic))
+        self.generic.predict(np.zeros((640,640,3),np.uint8),imgsz=cfg['image_size'],device=self.device,verbose=False)
 
     def embed(self,crops):
         torch=self.torch
@@ -55,11 +107,10 @@ class Perception:
         features=torch.nn.functional.normalize(features,dim=1)
         return features.cpu().numpy()
 
-    def infer(self,frame,store,mode='all'):
-        if mode not in ('beverages','all'):raise ValueError('识别模式无效')
-        start=time.monotonic();image=frame['image']
+    def _legacy_items(self,frame,mode):
+        image=frame['image']
         result=self.yolo.predict(image,imgsz=self.cfg['image_size'],conf=self.cfg['confidence'],
-            classes=[39,40,41] if mode=='beverages' else self.cfg['classes'],device=self.device,verbose=False,retina_masks=True,max_det=25)[0]
+            classes=self.mode_classes[mode],device=self.device,verbose=False,retina_masks=True,max_det=25)[0]
         items=[]
         outputs=[(result,'yolo')]
         if mode=='all':
@@ -68,7 +119,6 @@ class Perception:
             outputs.append((generic,'generic'))
         # Modes limit segmentation proposals only. Names, geometry and samples
         # always come from the same catalog, regardless of enrollment mode.
-        products=store.products
         for output,source in outputs:
             if len(items)>=12:break
             if output.masks is None:continue
@@ -89,6 +139,15 @@ class Perception:
                 crop=crop_object(image,mask)
                 items.append({'box':box.tolist(),'mask':mask,'crop':crop,'detection_score':float(score),'source':source})
                 if len(items)>=12:break
+        return items
+
+    def infer(self,frame,store,mode='all',prompt=None):
+        if mode not in ('beverages','all'):raise ValueError('识别模式无效')
+        start=time.monotonic()
+        segmenter=getattr(self,'segmenter',None)
+        if prompt is not None and segmenter is None:raise ValueError('任务按名称识别需要文字分割模型')
+        items=(segmenter.proposals(frame,mode,prompt=prompt) if prompt is not None else segmenter.proposals(frame,mode)) if segmenter is not None else self._legacy_items(frame,mode)
+        products=store.products
         if items:
             features=self.embed([v['crop'] for v in items]);used=set()
             for item,feature in zip(items,features):
@@ -104,6 +163,6 @@ class Perception:
                 m=match(feature,products,self.cfg['match_threshold'],self.cfg['match_margin'])
                 p=next((v for v in store.products if v['id']==m['id']),None)
                 item.update(id=candidate,feature=feature,product=p,match=m,
-                            name=p['name'] if p else '未录入 / 待确认')
+                            name=p['name'] if p else ('未录入 · '+item['semantic_label'] if item.get('semantic_label') else '未录入 / 待确认'))
         self.previous=[{'id':v['id'],'box':v['box']} for v in items]
         return items,round((time.monotonic()-start)*1000,1)

@@ -21,7 +21,7 @@ def receive(data):
             # hardware execution must stay disabled without a reset receipt.
             assert not w.execute.isEnabled() and w.motion is None
             assert w.pending_plan and data['target']['product_id']
-            w.grab().save('/tmp/shelf306_ui_planned.png')
+            w.grab().save('/tmp/shelf300_ui_planned.png')
         w.close();app.quit()
 w.receive_event=receive
 def tick():

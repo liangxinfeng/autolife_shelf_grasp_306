@@ -1,14 +1,13 @@
 """Lightweight non-cylinder RGB-D targets; never infer hidden thickness blindly."""
 import numpy as np
-from .bottle import object_points,horizontal_basis
+from .bottle import object_points,horizontal_basis,image_cropped,DepthQualityError
 from .core import unit
 
 
 def solid_center(points,up,product,camera):
     p=np.asarray(points,float);u,v,n=horizontal_basis(up)
     z=p@n;lo,hi=np.percentile(z,[1,99]);span=hi-lo
-    if not product['height_m']*.55<=span<=product['height_m']*1.35:
-        raise ValueError(f'可见高度约{span*1000:.0f}mm，请确认物体完整及录入高度')
+    if span<.025:raise DepthQualityError('可见物体有效深度高度不足25mm')
     middle=p[(z>=lo+.25*span)&(z<=lo+.75*span)]
     if len(middle)<40:raise ValueError('物体中央有效深度不足')
     xy=np.column_stack([middle@u,middle@v]);surface=np.median(xy,axis=0)
@@ -43,4 +42,6 @@ def estimate_object(frame,mask,T,up,product,cfg,grasp_pixel=None):
     if product.get('geometry')=='bag_edge':
         if grasp_pixel is None:raise ValueError('请先在图像中选择袋口实体边缘夹取点')
         return bag_edge_target(points,pixels,grasp_pixel,up,product,T[:3,3])
-    return solid_center(points,up,product,T[:3,3])
+    center,stats=solid_center(points,up,product,T[:3,3])
+    stats['image_cropped']=image_cropped(mask)
+    return center,stats

@@ -48,7 +48,8 @@ def test_compiled_fk_and_analytic_jacobian_equivalent(tmp_path):
 
 
 @pytest.mark.parametrize('dense_collision',[False,True])
-def test_all_four_stages_still_require_dense_validation(monkeypatch,dense_collision):
+@pytest.mark.parametrize('profile',['direct','joint_direct'])
+def test_all_four_stages_still_require_dense_validation(monkeypatch,dense_collision,profile):
     p=m.Planner.__new__(m.Planner);p.names=list('abcdefg')
     p.cfg={'arm':'left','gripper_max_width_m':.15,'approach_yaw_deg':0.,'up_torso':[0,0,1],
            'T_wrist_tool_quat_xyzw':[0,0,0,1],'pregrasp_m':.1,'lift_m':.03,'withdraw_m':.15,
@@ -56,7 +57,7 @@ def test_all_four_stages_still_require_dense_validation(monkeypatch,dense_collis
     p.guard=SimpleNamespace(cache=set());p.fk=SimpleNamespace(sha='test')
     p.joint_limit_policy={'version':1,'bounds_deg':{n:[-180,180] for n in p.names}}
     p.pose=lambda q,tcp:(np.array([q[n] for n in 'abc']),np.eye(3))
-    p.solve=lambda source,tcp,point,*args:{**source,**dict(zip('abc',point))}
+    p.solve=lambda source,tcp,point,*args,**kwargs:{**source,**dict(zip('abc',point))}
     p.check=lambda *args:None
     calls=[]
     class FakePath:
@@ -73,14 +74,14 @@ def test_all_four_stages_still_require_dense_validation(monkeypatch,dense_collis
     source={n:0. for n in p.names}
     if dense_collision:
         with pytest.raises(m.CollisionFailure,match='dense collision'):
-            p._route(source,np.zeros(3),np.array([.25,0,0]),{'diameter_m':.07},False,time.monotonic())
+            p._route(source,np.zeros(3),np.array([.25,0,0]),{'diameter_m':.07},False,time.monotonic(),profile=profile)
     else:
-        result=p._route(source,np.zeros(3),np.array([.25,0,0]),{'diameter_m':.07},False,time.monotonic())
+        result=p._route(source,np.zeros(3),np.array([.25,0,0]),{'diameter_m':.07},False,time.monotonic(),profile=profile)
         assert result['self_collision_checked'] and len(result['segments'])==4
     assert len(calls)==4
 
 
-def test_withdraw_retry_reuses_prefix_but_revalidates_full_path(monkeypatch):
+def test_adaptive_withdraw_checks_full_path_and_gates_orientation(monkeypatch):
     p=m.Planner.__new__(m.Planner);p.names=list('abcdefg')
     p.cfg={'arm':'left','gripper_max_width_m':.15,'approach_yaw_deg':0.,'up_torso':[0,0,1],
            'T_wrist_tool_quat_xyzw':[0,0,0,1],'pregrasp_m':.1,'lift_m':.03,'withdraw_m':.2,
@@ -88,10 +89,9 @@ def test_withdraw_retry_reuses_prefix_but_revalidates_full_path(monkeypatch):
     p.guard=SimpleNamespace(cache=set());p.fk=SimpleNamespace(sha='test')
     p.joint_limit_policy={'bounds_deg':{n:[-180,180] for n in p.names}}
     p.pose=lambda q,tcp:(np.array([q[n] for n in 'abc']),np.eye(3))
-    fail=[True];solves=[];dense=[]
-    def solve(source,tcp,point,*args):
-        solves.append(p._candidate_stage)
-        if p._candidate_stage==3 and fail[0]:raise m.IKFailure('tail only')
+    solves=[];dense=[]
+    def solve(source,tcp,point,*args,**kwargs):
+        solves.append((p._candidate_stage,point.copy(),kwargs.get('retreat_freedom',0.)))
         return {**source,**dict(zip('abc',point))}
     p.solve=solve;p.check=lambda *args:None
     class FakePath:
@@ -101,14 +101,10 @@ def test_withdraw_retry_reuses_prefix_but_revalidates_full_path(monkeypatch):
             yield self.waypoints[-1]
     monkeypatch.setattr(m,'JointPath',FakePath)
     monkeypatch.setattr(m,'configure_grasp_path',lambda path,cfg:path)
-    monkeypatch.setattr(m,'withdrawal_rotation',lambda R,*_:R)
     source={n:0. for n in p.names};tcp=np.zeros(3);center=np.array([.25,0,0]);product={'diameter_m':.07}
-    with pytest.raises(m.IKFailure):p._route(source,tcp,center,product,False,time.monotonic())
-    prefix_count=sum(s<3 for s in solves)
-    assert prefix_count and not dense
-    fail[0]=False
-    p._route(source,tcp,center,product,False,time.monotonic(),0.,'direct',-5.)
-    assert sum(s<3 for s in solves)==prefix_count
-    assert dense==[0,1,2,3] # not just the replacement tail
-    p._route(source,tcp.copy(),center,product,False,time.monotonic(),0.,'direct',-5.)
-    assert sum(s<3 for s in solves)==prefix_count*2 # distinct request cannot reuse
+    result=p._route(source,tcp,center,product,False,time.monotonic())
+    assert dense==[0,1,2,3]
+    assert result['withdraw_orientation_mode']=='adaptive'
+    for index,point,freedom in solves:
+        if index<3 or .25-point[0]<=.06+1e-9:assert freedom==0.
+    assert any(index==3 and freedom==1. for index,point,freedom in solves)

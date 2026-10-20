@@ -16,10 +16,11 @@ def test_old_cylinder_and_new_shapes_share_product_store(tmp_path):
     assert changed['id']==solid['id'] and changed['depth_m']==.04
 
 
-def test_non_cylinder_center_uses_user_thickness_not_radius_fit():
+@pytest.mark.parametrize('reference_height',[.04,.12,.4])
+def test_non_cylinder_center_uses_user_thickness_not_radius_fit(reference_height):
     y,z=np.meshgrid(np.linspace(-.025,.025,30),np.linspace(0,.12,60))
     p=np.column_stack([np.full(y.size,.6),y.ravel(),z.ravel()])
-    c,stats=solid_center(p,[0,0,1],{'height_m':.12,'depth_m':.03},np.zeros(3))
+    c,stats=solid_center(p,[0,0,1],{'height_m':reference_height,'depth_m':.03},np.zeros(3))
     np.testing.assert_allclose(c,[.615,0,.06],atol=.002)
     assert stats['geometry']=='solid'
 

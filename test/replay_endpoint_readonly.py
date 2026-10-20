@@ -6,7 +6,7 @@ from autolife_handeye_calibration_306.core import Kinematics,TORSO
 from autolife_handeye_calibration_306.verification_core import wrist_frame,q_for_fk
 from autolife_shelf_grasp_306.motion import transit_pose_ok,Arrival
 
-p=Path('/tmp/shelf306_cu4jjp8w/plan_09ec0b31bb9747a38ddeeae84cd52bf4.json')
+p=Path('/tmp/shelf300_cu4jjp8w/plan_09ec0b31bb9747a38ddeeae84cd52bf4.json')
 plan=json.loads(p.read_text());cfg=plan['config'];fk=Kinematics(cfg['urdf_path'])
 goal=plan['segments'][0]['waypoints'][-1];actual=dict(goal)
 actual['Joint_Left_Shoulder_Outer']-=.9593

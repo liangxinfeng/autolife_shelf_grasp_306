@@ -19,7 +19,7 @@ def tick():
     elif phase['scan'] and not window.busy and window.frozen:
         assert not window.video.pix.isNull()
         assert not window.execute.isEnabled()
-        window.grab().save('/tmp/shelf306_ui_live.png')
+        window.grab().save('/tmp/shelf300_ui_live.png')
         phase['done']=True;window.close();app.quit()
 timer=C.QTimer();timer.timeout.connect(tick);timer.start(200)
 C.QTimer.singleShot(35000,app.quit)

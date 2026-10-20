@@ -9,7 +9,7 @@ from autolife_handeye_calibration_306.verification_core import load_geometry
 
 root=Path('/home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306')
 cfg=yaml.safe_load((Path(__file__).parents[1]/'config/grasp.yaml').read_text())
-f=np.load('/tmp/shelf306_support_fixture.npz');meta=json.loads(str(f['meta']))
+f=np.load('/tmp/shelf300_support_fixture.npz');meta=json.loads(str(f['meta']))
 frame={k:f[k] for k in ['image','depth','K','D']}
 frame.update(frame_id=meta['frame_id'],depth_id=meta['frame_id'],intrinsics=meta['intrinsics'],depth_intrinsics=meta['intrinsics'])
 centers=[]

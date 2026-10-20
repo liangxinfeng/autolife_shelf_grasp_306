@@ -1,56 +1,37 @@
-# 云蝶306 · 视觉抓取实验
+# 云蝶300 · 视觉抓取与自动任务
 
-306机器人 `~/grasp306` 对应功能包，提供物品识别、商品录入、深度定位、抓取规划和执行界面。源码取自306当前使用版本（2026-09-16）。
+本分支 `robot300-20261020` 是300机器人（192.168.8.122）当前 `~/ros2_ws/src/autolife_shelf_grasp_306` 功能包的源码快照（2026-10-20）。ROS包名保持不变；本次只创建新分支。
 
-## 功能
+## 当前功能
 
-- **仅饮料 / 通用物品**两种模式，共用商品库，支持修改尺寸、增删样本图片。
-- YOLO11分割与FastSAM通用候选 → DINOv2商品匹配 → 多帧RGB-D定位。
-- 使用手眼标定外参和夹爪TCP，规划预抓取、抓取、抬起、收回完整流程。
-- 优先正向接近，必要时逐步尝试小角度；收回方向单独求解，避免仅为收回困难而增大抓取角度。
-- 一键复位并张开夹爪；确认抓取后自动闭爪、抬起和收回，保留停止按钮。
+- Grounding DINO + SAM 2 语义检测与分割、DINOv2 商品匹配、RGB-D几何定位。
+- 抓取与放置规划、左右臂选择与独立标定配置、可设置抓取中心补偿及收紧量。
+- 导航地图与航点、全局/手动重定位，以及导航、抓取、放置、固定动作的任务编排。
+- 全身关键帧记录、编辑、预览与动作串回放，身体高度及头部姿态设置。
+- 自动任务单次/循环运行、暂停继续、状态展示与全屏云蝶科技/UNDY页面。
 
-## 环境与安装
+功能说明见 [WORKFLOWS_ZH.txt](WORKFLOWS_ZH.txt)。其他历史说明见 [README_ZH.md](README_ZH.md)；历史文档中的旧识别后端和参数不代表当前配置，现用配置以 [config/grasp.yaml](config/grasp.yaml) 及源码为准。
 
-面向Ubuntu 24.04、ROS 2 Jazzy和306厂商运行环境，**不是通用机器人即装即用软件**。需要：
+## 环境与运行
 
-- [手眼标定功能包](https://github.com/liangxinfeng/autolife_handeye_calibration_306)。
-- [控制中心](https://github.com/liangxinfeng/autolife_robot_control_center)中的 `control_center_joint_control`。
-- [遥操V4](https://github.com/liangxinfeng/openarmx_teleop_vr_306_v4)的运动学与碰撞模块。
-- 厂商SDK、机器人URDF、相机共享内存及支持保持式SYNC入口的机械臂服务；这些不随仓库分发。
-- 系统Python的ROS/Qt依赖，以及 `robot_env` 内的PyTorch、Ultralytics、Pinocchio、碰撞库等依赖。
+面向Ubuntu 24.04、ROS 2 Jazzy及相同厂商基础环境，不是独立安装即可控制任意机器人的程序。依赖控制中心、手眼标定、遥操运动学/碰撞模块、厂商SDK与URDF、RGB-D相机接口和支持SYNC的机械臂服务。系统Python需要ROS/Qt依赖；`robot_env` 需要模型推理、运动学及碰撞计算依赖。
 
 ```bash
 cd ~/ros2_ws/src
-git clone https://github.com/liangxinfeng/autolife_shelf_grasp_306.git
+git clone -b robot300-20261020 https://github.com/liangxinfeng/autolife_shelf_grasp_306.git
 cd ~/ros2_ws
 source /opt/ros/jazzy/setup.bash
 colcon build --packages-select autolife_shelf_grasp_306 --symlink-install
 source install/setup.bash
-ros2 launch autolife_shelf_grasp_306 grasp.launch.py
+ros2 run autolife_shelf_grasp_306 shelf_grasp
 ```
 
-已有306环境直接运行 `~/grasp306`。首次安装可在检查路径后，将 `scripts/grasp306` 复制到用户主目录并添加执行权限。
+本分支保留300实机配置：`robot_id: 300`，复位采用系统位姿（`reset_pose_source: robot_system`），允许缺失标定时采用系统几何关系（`allow_system_geometry_fallback: true`）。左臂标定路径指向 `sessions/300_current/session.json`，右臂独立标定路径为空。模型、标定文件与机器人运行环境需另行部署；迁移至其他机型前应核对关节、夹爪、标定、位姿和路径配置。
 
-## 使用前配置
+## 发布范围
 
-编辑 [config/grasp.yaml](config/grasp.yaml)：相机/模型路径、标定会话、机器人模型、TCP与目标补偿、运动参数。
+包含当前源码、配置、启动脚本、测试及文档；不包含 `models/` 权重、`data/` 商品照片/特征库/动作记录/任务运行数据、标定会话、缓存、日志或旧代码备份。缺少这些外部依赖时，单独克隆仓库并不等于完整部署。
 
-- 模型权重及DINOv2源码按 [详细说明](README_ZH.md) 单独部署，本仓库不包含权重。
-- 配置保留306实机参数；其中标定会话绝对路径在新机器上不存在，必须改成该机器自己的结果。
-- `tcp_offset_mm: 15` 是靶标到夹取中心的工具偏移；`target_offset_torso_mm: [0,15,0]` 是另一个向机器人右侧15mm的经验补偿，不能混为一谈，也不能直接套用其他机器人。
-- 新环境先关闭 `hardware_execution`、`reset_hardware_enabled` 和 `supervised_experiment`，完成实机核验后再按现场流程开放运动。仓库配置是306现用快照，不是安全默认模板。
+本次发布保持机器人源码和配置原样，仅更新本README的机型、分支及部署说明；进行了源文件哈希核对与Python语法检查；不代表全部功能重新完成实机测试。测试目录中包含依赖ROS、模型和现场数据的脚本，不应在机器人上未经确认批量执行。软件停止不能代替实体急停；运动前需核对现场条件和控制权。
 
-## 操作
-
-启动 → 复位并准备 → 识别/录入物品 → 选择物品 → 规划预览 → 确认抓取。
-
-复位、确认抓取均会驱动真机；仅启动界面不会自动运动。不要同时运行其他机械臂控制程序。
-
-## 边界与数据
-
-当前属于**有人看护的实验系统**，不保证抓取成功或标定精度。保留关节限制、自碰撞、反馈时效、控制权和轨迹检查，但没有完整的货架、桌面和邻物外部碰撞感知。软件停止不能替代实体急停；请清空运动空间并防止物品跌落。
-
-未上传商品照片/特征库、标定会话、运行日志、模型权重、厂商二进制及现场图像；程序运行后在本地生成数据。纯逻辑测试位于 `test/`，部分回放测试需要另备现场数据，连接硬件的诊断脚本不应批量执行。
-
-详细使用与版本记录：[README_ZH.md](README_ZH.md)、[VALIDATION_ZH.md](VALIDATION_ZH.md)。公开源码不等于授予第三方商业使用许可；保留现有许可声明，YOLO/FastSAM、DINOv2及厂商组件分别遵循其原有授权。
+公开源码不等于授予第三方商业使用许可；各模型、开源库及厂商组件遵循各自授权。

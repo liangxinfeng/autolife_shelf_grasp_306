@@ -15,7 +15,7 @@ from autolife_handeye_calibration_306.verification_core import camera_transform,
 
 root=Path('/home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306')
 cfg=yaml.safe_load((root/'config/grasp.yaml').read_text());rclpy.init(args=[])
-camera=Camera(cfg,'/tmp/shelf306_probe.jpg');robot=Robot();result={}
+camera=Camera(cfg,'/tmp/shelf300_probe.jpg');robot=Robot();result={}
 try:
     seen=set();paired=set();until=time.monotonic()+5
     while time.monotonic()<until:
@@ -40,6 +40,6 @@ try:
     T=camera_transform(data,planner.fk,q,frame);tcp=load_geometry(data,planner.fk,cfg['tcp_offset_mm'])
     result['T_torso_camera']=T.tolist();result['tcp_m']=tcp.tolist()
     result['hardware_publishers_created']=False
-    Path('/tmp/shelf306_probe_result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
+    Path('/tmp/shelf300_probe_result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
     print(json.dumps(result,ensure_ascii=False,indent=2))
 finally:camera.close();robot.close();rclpy.shutdown()

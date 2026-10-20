@@ -11,7 +11,7 @@ from autolife_handeye_calibration_306.verification_core import load_geometry
 
 root=Path('/home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306')
 cfg=yaml.safe_load((root/'config/grasp.yaml').read_text());p=Planner(cfg)
-f=np.load('/tmp/shelf306_support_fixture.npz');m=json.loads(str(f['meta']))
+f=np.load('/tmp/shelf300_support_fixture.npz');m=json.loads(str(f['meta']))
 frame={k:f[k] for k in ['image','depth','K','D']}
 frame.update(frame_id=m['frame_id'],depth_id=m['frame_id'],intrinsics=m['intrinsics'],depth_intrinsics=m['intrinsics'])
 q=p.reset_plan(m['q'])['end_q'];seed=np.deg2rad([q[n] for n in p.names]);tcp=load_geometry(json.loads(Path(cfg['calibration']).read_text()),p.fk,15.)

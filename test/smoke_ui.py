@@ -12,7 +12,7 @@ run=Path(tempfile.mkdtemp(prefix='shelf_ui_test_'))
 window=Window(root,run,start_worker=False)
 window.receive_event({'event':'ready','blockers':['相机/TCP待实测验证'],'products':0})
 window.show();app.processEvents()
-window.grab().save('/tmp/shelf306_ui.png')
+window.grab().save('/tmp/shelf300_ui.png')
 assert window.scan.isEnabled() and not window.execute.isEnabled()
 assert not hasattr(window,'table')
 launches=[]
@@ -51,16 +51,28 @@ product=dict(id='gum',name='口香糖',diameter_m=.08,height_m=.05,geometry='cyl
 editor=ProductEditor(window,product,editing=True)
 editor.width.setValue(50);editor.height.setValue(80)
 assert editor.values()['diameter_mm']==50 and editor.values()['height_mm']==80
-editor.show();app.processEvents();editor.grab().save('/tmp/shelf306_editor.png');editor.close()
+editor.show();app.processEvents();editor.grab().save('/tmp/shelf300_editor.png');editor.close()
 window.catalog_dialog=CatalogDialog(window);window.catalog_dialog.refresh([product]);window.catalog_dialog.show()
 app.processEvents();assert window.catalog_dialog.current()['id']=='gum'
-window.catalog_dialog.grab().save('/tmp/shelf306_catalog.png');window.catalog_dialog.close()
+window.catalog_dialog.grab().save('/tmp/shelf300_catalog.png');window.catalog_dialog.close()
 window.receive_event({'event':'scene','items':[
     {'id':1,'name':'甲','matched':False,'box':[0,0,10,10]},
     {'id':2,'name':'乙','matched':False,'box':[20,0,30,10]}],'shape':[720,1280,3],'elapsed_ms':1})
 window.list.setCurrentRow(1)
 window.receive_event({'event':'catalog','products':[product],'items':window.items[:]})
 assert window.selected_id()==2 # library edits must not change the image being added
+sent=[]
+window.send=lambda action,**kw:sent.append((action,kw))
+question=Q.QMessageBox.question
+Q.QMessageBox.question=lambda *a,**kw:Q.QMessageBox.No
+window.catalog_dialog.remove_product();window.prepare_robot();assert not sent
+Q.QMessageBox.question=lambda *a,**kw:Q.QMessageBox.Yes
+window.catalog_dialog.remove_product();window.prepare_robot()
+assert sent==[('remove_product',{'product_id':'gum'}),('prepare',{})]
+Q.QMessageBox.question=question
+window.receive_event({'event':'catalog','products':[],'items':[]})
+assert window.catalog_dialog.current() is None and not window.execute.isEnabled()
+assert all(not b.isEnabled() for b in window.catalog_dialog.buttons)
 window.catalog_dialog.close()
 window.close()
 assert not errors,errors

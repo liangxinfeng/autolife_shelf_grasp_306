@@ -14,9 +14,9 @@ os.environ['ROS_DOMAIN_ID']='0';os.environ['RMW_IMPLEMENTATION']='rmw_cyclonedds
 os.environ['CYCLONEDDS_URI']='<CycloneDDS><Domain><General><Interfaces><NetworkInterface name="lo"/></Interfaces></General><Discovery><ParticipantIndex>auto</ParticipantIndex><MaxAutoParticipantIndex>200</MaxAutoParticipantIndex></Discovery></Domain></CycloneDDS>'
 root=Path('/home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306')
 cfg=yaml.safe_load((root/'config/grasp.yaml').read_text())
-cfg['generic_weights']='/tmp/shelf306_FastSAM-s.pt'
+cfg['generic_weights']='/tmp/shelf300_FastSAM-s.pt'
 cfg['classes']=[24,26,39,40,41,46,47,48,49,50,51,52,53,54,55]
-rclpy.init(args=[]);camera=Camera(cfg,'/tmp/shelf306_multi_preview.jpg');robot=Robot()
+rclpy.init(args=[]);camera=Camera(cfg,'/tmp/shelf300_multi_preview.jpg');robot=Robot()
 try:
     model=Perception(cfg,root);store=ProductStore(root/'data');fk=Kinematics(cfg['urdf_path'])
     calibration=json.loads(Path(cfg['calibration']).read_text())
@@ -35,7 +35,7 @@ try:
                 row.update(depth_points=len(points),visible_height_mm=float(np.ptp(np.percentile(points@n,[1,99]))*1000))
             except ValueError as exc:row['depth_error']=str(exc)
             records.append(row)
-        cv2.imwrite('/tmp/shelf306_multi_candidates.jpg',image)
-        Path('/tmp/shelf306_multi_candidates.json').write_text(json.dumps(records,ensure_ascii=False,indent=2))
+        cv2.imwrite('/tmp/shelf300_multi_candidates.jpg',image)
+        Path('/tmp/shelf300_multi_candidates.json').write_text(json.dumps(records,ensure_ascii=False,indent=2))
         print('INFERENCE',elapsed,json.dumps(records,ensure_ascii=False))
 finally:camera.close();robot.close();rclpy.shutdown()

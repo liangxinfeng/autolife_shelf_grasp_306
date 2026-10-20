@@ -124,6 +124,15 @@ class ProductStore:
         p['examples'].pop(index);p['features'].pop(index);self.save(products)
         return p
 
+    def remove_product(self,product_id):
+        self.reload()
+        removed=next((p for p in self.products if p['id']==product_id),None)
+        if removed is None:raise ValueError('商品已不存在，请刷新商品库')
+        # save() archives the full previous catalog; sample files stay available
+        # for recovery but are no longer referenced or matched in either mode.
+        self.save([copy.deepcopy(p) for p in self.products if p['id']!=product_id])
+        return removed
+
 
 def product_category(product):
     # Original bottle-only records predate geometry/category fields.

@@ -4,6 +4,26 @@ from autolife_shelf_grasp_306.bridge import GraspBridge,CalibrationBridge
 import autolife_shelf_grasp_306.bridge as module
 
 
+def test_hold_enable_keeps_measured_pose_without_system_reset(monkeypatch):
+    import control_center_joint_control.joint_bridge as factory
+    import autolife_handeye_calibration_306.bridge as calibration
+    published=[];node=GraspBridge.__new__(GraspBridge)
+    node._current={n:0. for n in factory.BODY_JOINTS};node._controller_target=dict(node._current)
+    node._current['Joint_Neck_Pitch']=-46.13
+    node._details={};node._is_feedback_fresh=lambda:True;node._communication_lost_joints=lambda _:[]
+    node._event=lambda *args:None
+    node._control_reset_pub=SimpleNamespace(get_subscription_count=lambda:1,publish=lambda msg:published.append(msg.data))
+    monkeypatch.setattr(calibration,'competing_controller',lambda:'')
+    response=node.unlock()
+    assert response.success and not node._hardware_ready
+    assert node._hardware_unlock_mode=='without_reset' and not node._leg_waist_enabled
+    assert node._hardware_prepare['stage']=='check_modes'
+    assert node._hardware_prepare['hold_targets']==node._current and not published
+    assert not hasattr(node,'unlock_with_reset') and not node.gui_call
+    monkeypatch.setattr(calibration,'competing_controller',lambda:'VR正在运行')
+    assert not node.unlock().success and not published
+
+
 def test_streamed_settled_group_is_not_stalled(monkeypatch):
     now=[0.];locks=[]
     node=GraspBridge.__new__(GraspBridge)

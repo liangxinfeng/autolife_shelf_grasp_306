@@ -17,6 +17,7 @@ class GraspBridge(CalibrationBridge):
         super()._event(message,level)
 
     def _advance_motion(self):
+        if getattr(self,'task_pause',None) and self.task_pause.tick():return
         # CalibrationBridge checks its watchdog BEFORE the parent's arrival
         # cleanup. Streaming can recreate a settled goal between those ticks,
         # leaving its old watchdog alive indefinitely. No motion is expected

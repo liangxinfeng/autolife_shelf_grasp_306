@@ -7,11 +7,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 from autolife_handeye_calibration_306.depth_target import aligned_depth
+from .live_overlay import LiveOverlay,encode_packet
 
 
 class Camera:
     def __init__(self, cfg, preview):
         self.cfg=cfg; self.preview=Path(preview); self.latest=None; self.error='等待相机'
+        self.overlay=LiveOverlay()
         self.lock=threading.Lock(); self.stop=threading.Event()
         self.thread=threading.Thread(target=self.run,daemon=True);self.thread.start()
 
@@ -57,6 +59,14 @@ class Camera:
                         ok,data=cv2.imencode('.jpg',small,[cv2.IMWRITE_JPEG_QUALITY,85])
                         if ok:
                             temp=self.preview.with_suffix('.tmp');temp.write_bytes(data.tobytes());os.replace(temp,self.preview)
+                            # Display failures must never invalidate RGB-D used by
+                            # planning. The packet binds labels to exactly this RGB.
+                            try:meta=self.overlay.render(frame)
+                            except Exception:
+                                meta=dict(revision=None,items=[],path=[],path_revision=None,
+                                          shape=list(image.shape),frame_id=ident,received=now,lost=1,path_status='unavailable')
+                            packet=self.preview.with_suffix('.npz');tmp=packet.with_suffix('.npz.tmp')
+                            tmp.write_bytes(encode_packet(data,meta));os.replace(tmp,packet)
                         last_preview=now
                     self.stop.wait(.008)
                 except Exception as exc:

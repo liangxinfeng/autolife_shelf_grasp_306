@@ -13,9 +13,9 @@ from std_srvs.srv import SetBool
 class PositionSyncSession:
     def __init__(self,node):
         self.node=node;self.requested=False;self.active=False;self.last_heartbeat=-float('inf')
-        self.client=node.create_client(SetBool,'/control_independent_sync_hold_session_0_306')
-        self.heartbeat=node.create_publisher(String,'/control_independent_sync_heartbeat_0_306',10)
-        self.exit_pub=node.create_publisher(String,'/control_independent_sync_session_command_0_306',10)
+        self.client=node.create_client(SetBool,'/control_independent_sync_hold_session_0_300')
+        self.heartbeat=node.create_publisher(String,'/control_independent_sync_heartbeat_0_300',10)
+        self.exit_pub=node.create_publisher(String,'/control_independent_sync_session_command_0_300',10)
 
     def enter(self,spin):
         deadline=time.monotonic()+2.
