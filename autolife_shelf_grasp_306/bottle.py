@@ -140,13 +140,31 @@ def foreground_cylinder(points,heights,r,seed,away,low,high,total):
     return best[1],best[2]
 
 
-def estimate(frame,mask,T,up,product,cfg):
-    points,pixels,bounds=object_points(frame,mask,T,cfg)
+def cylinder_foreground(points,pixels,up,max_width):
+    """透明瓶身可能透出远处背景。先按竖直瓶身的横向一致性选前景。
+
+    保留同一竖直柱内的瓶盖、瓶肩及瓶底，不沿相机深度裁切高度。
+    至少70%的实测点必须支持主体；不填补缺失深度，不修改物品尺寸。
+    """
+    u,v,_=horizontal_basis(up)
+    xy=np.asarray(points)@np.column_stack([u,v])
+    middle=np.median(xy,axis=0)
+    keep=np.linalg.norm(xy-middle,axis=1)<=float(max_width)
+    if keep.sum()<max(80,len(points)*.70):
+        raise DepthQualityError('瓶身深度缺少一致主体，反光或背景占比过高')
+    return keep
+
+
+def estimate(frame,mask,T,up,product,cfg,observed=None):
+    points,pixels,bounds=object_points(frame,mask,T,cfg) if observed is None else observed
+    foreground=cylinder_foreground(points,pixels,up,cfg.get('gripper_max_width_m',.09))
+    ratio=float(foreground.mean());points=points[foreground];pixels=pixels[foreground]
     center,stats,keep=center_from_points(points,up,product,T[:3,3])
     ys=pixels[keep,1];y0,y1=bounds;span=max(1,y1-y0)
     if len(ys)<80 or np.percentile(ys,1)>y0+span*.12 or np.percentile(ys,99)<y1-span*.12:
         raise DepthQualityError('当前可见区域的上下边缘深度缺失过多，无法稳定确定可见部分中心')
     stats['image_cropped']=image_cropped(mask)
+    stats['bottle_foreground_ratio']=ratio
     return center,stats
 
 
@@ -170,7 +188,10 @@ def planning_product(product,geometry):
     # A clipped top/bottom may put the grasp point away from the whole object's
     # midpoint. Bound that asymmetry instead of assuming symmetric half-height.
     if geometry.get('image_cropped'):
-        result['collision_height_m']=observed+2*max(0.,product['height_m']-observed)
+        bound=float(product.get('height_upper_bound_m',product['height_m']))
+        if not np.isfinite(bound) or bound<product['height_m'] or bound>.4:
+            raise ValueError('局部物品包络高度上界无效')
+        result['collision_height_m']=observed+2*max(0.,bound-observed)
     else:result['collision_height_m']=observed
     return result
 

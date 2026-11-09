@@ -25,8 +25,8 @@ def held_grasp(run):
 def new_standalone_request(run,settings):
     from .demo_config import require_placeable
     grasp,record=held_grasp(run);require_placeable(grasp['product'])
-    if grasp.get('geometry',{}).get('image_cropped'):
-        raise ValueError('本次抓取未完整看到瓶身，无法确认瓶底位置，不能自动放置')
+    from .demo_config import require_placement_bottom
+    require_placement_bottom(grasp)
     context=dict(mode='standalone',run_id=uuid.uuid4().hex,session_id=run.name,
                  grasp_plan_id=grasp['plan_id'],product_id=grasp['product']['id'],settings=settings)
     atomic_json(run/'standalone_place.json',context)

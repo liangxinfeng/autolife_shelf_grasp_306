@@ -22,10 +22,11 @@ def defaults(cfg):
         cfg.get('target_offset_torso_mm',[0.,15.,0.]) if side==source else [0.,0.,0.]) for side in ('left','right')})
 
 def from_display(front,right,up):
-    # URDF torso uses +X forward, +Y robot-right, -Z upward.
-    return [float(front),float(right),-float(up)]
+    # 本机S3完整URDF：+X朝前、+Y朝机器人左侧、+Z朝上。
+    # 文件始终保存原始躯干系向量；改显示换算不反转历史补偿的真实位移。
+    return [float(front),-float(right),float(up)]
 
-def to_display(offset):return [offset[0],offset[1],-offset[2]]
+def to_display(offset):return [offset[0],-offset[1],offset[2]]
 
 def description(offset):
     names=[('前','后'),('右','左'),('上','下')]

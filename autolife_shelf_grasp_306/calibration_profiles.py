@@ -12,7 +12,10 @@ class CalibrationProfiles:
         self.cache = {}
 
     def resolve(self, cfg):
-        from autolife_handeye_calibration_306.verification_core import load_geometry
+        from .grasp_geometry import load_geometry, uses_urdf, nominal_profile, profile_digest
+        if uses_urdf(cfg):
+            data=nominal_profile(cfg,self.fk)
+            return data,profile_digest(data)
         path = str(Path(cfg['calibration']).resolve())
         raw = Path(path).read_bytes()
         digest = hashlib.sha256(raw).hexdigest()
@@ -31,17 +34,19 @@ class CalibrationProfiles:
         if side not in ('left', 'right'):
             raise ValueError('无效抓取手臂')
         cfg = copy.deepcopy(self.base)
+        cfg['arm'] = side
+        from .grasp_geometry import uses_urdf
         explicit = cfg.get(side + '_calibration')
         if explicit:
             cfg['calibration'] = explicit
         data, digest = self.resolve(cfg)
-        if explicit and data.get('config', {}).get('arm') != side:
+        if explicit and not uses_urdf(cfg) and data.get('config', {}).get('arm') != side:
             raise ValueError('独立标定文件与抓取手臂不一致：' + side)
         if side != self.base.get('arm', 'left'):
             cfg['target_offset_torso_mm'] = list(cfg.get(side + '_target_offset_torso_mm', [0., 0., 0.]))
         cfg['calibration_profile'] = {
             'arm': side, 'source_arm': data.get('config', {}).get('arm', 'left'),
-            'session': Path(cfg['calibration']).parent.name, 'sha256': digest,
+            'session': '本机URDF' if uses_urdf(cfg) else Path(cfg['calibration']).parent.name, 'sha256': digest,
             'quality_grade': data.get('report', {}).get('quality_grade', 'unknown'),
             'test_only': data.get('report', {}).get('quality_grade') == 'needs_validation',
         }
@@ -51,8 +56,10 @@ class CalibrationProfiles:
         from .arm_selection import plan_arm
         cfg, data, digest = self.for_arm(plan_arm(plan))
         saved = plan['config']
-        if (Path(saved['calibration']).resolve() != Path(cfg['calibration']).resolve()
+        from .grasp_geometry import uses_urdf
+        if (uses_urdf(saved) != uses_urdf(cfg)
+                or (not uses_urdf(cfg) and Path(saved['calibration']).resolve() != Path(cfg['calibration']).resolve())
                 or plan.get('calibration_sha256') != digest
-                or plan.get('tcp_offset_mm') != cfg['tcp_offset_mm']):
+                or (not uses_urdf(cfg) and plan.get('tcp_offset_mm') != cfg['tcp_offset_mm'])):
             raise ValueError('抓取后该手臂标定或夹取中心参数改变，不能沿用持物记录')
         return data, digest

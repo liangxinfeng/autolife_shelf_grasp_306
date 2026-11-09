@@ -6,7 +6,7 @@ def normalize(value):
     if value is None:return None
     if not isinstance(value,dict):raise ValueError('步骤姿态格式无效')
     mode=value.get('body_mode','keep');height=value.get('lowering_cm',0);pitch=value.get('head_pitch_deg')
-    if mode not in ('keep','forward','reverse'):raise ValueError('请选择保持、正向或反向下蹲')
+    if mode not in ('keep','recorded','forward','reverse'):raise ValueError('请选择保持、沿用动作记录、正向或反向下蹲')
     if isinstance(height,bool):raise ValueError('下降高度应填写厘米数')
     height=float(height)
     maximum=53. if mode=='reverse' else 56.
@@ -16,7 +16,7 @@ def normalize(value):
         pitch=float(pitch)
         if not math.isfinite(pitch) or not -30<=pitch<=45:raise ValueError('头部角度应在-30～45°内（正数俯视）')
     if mode=='keep' and pitch is None:return None
-    return dict(body_mode=mode,lowering_cm=height if mode!='keep' else 0.,head_pitch_deg=pitch)
+    return dict(body_mode=mode,lowering_cm=height if mode not in ('keep','recorded') else 0.,head_pitch_deg=pitch)
 
 
 def targets(setting):
@@ -24,7 +24,7 @@ def targets(setting):
     from control_center_joint_control.joint_definitions import JOINT_LIMITS
     value=normalize(setting);result={}
     if value is None:return result
-    if value['body_mode']!='keep':
+    if value['body_mode'] not in ('keep','recorded'):
         signed=value['lowering_cm']/100.*(-1 if value['body_mode']=='reverse' else 1)
         result.update(body_height_targets(signed,allow_reverse=True))
     if value['head_pitch_deg'] is not None:result['Joint_Neck_Pitch']=-value['head_pitch_deg']

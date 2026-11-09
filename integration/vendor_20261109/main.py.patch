@@ -1,0 +1,174 @@
+--- a/main.py
++++ b/main.py
+@@ -340,6 +340,22 @@
+             (shared_state_manager.right_arm_joint_state, tuple(range(7))),
+         )
+ 
++        # 仅持物观察/放置会话启用。进入时保留原厂当前指令，不从历史文件重发夹紧量。
++        loaded_gripper_session = {'active': False}
++
++        def capture_gripper_targets():
++            import math
++            result = []
++            for state in all_joint_states[-2:]:
++                target = tuple(float(v) for v in state.get_target_joint_positions())
++                if len(target) != 1 or not all(math.isfinite(v) and 10. <= v <= 330. for v in target):
++                    raise ValueError('invalid live gripper target; loaded handoff not started')
++                result.append(target)
++            return tuple(result)
++
++        def with_gripper_targets(snapshot, targets):
++            return tuple(snapshot[:-2]) + tuple(targets)
++
+         def capture_measured_pose(states=all_joint_states):
+             return tuple(
+                 tuple(float(value) for value in state.get_current_joint_positions())
+@@ -385,11 +401,26 @@
+                 )
+             return maximum_error, maximum_speed
+ 
+-        def exit_independent_sync_session(reason="independent teleop exited"):
++        def exit_independent_sync_session(reason="independent teleop exited", *, preserve_closing_grippers=False):
+             with independent_sync_lock:
+                 if not independent_sync_active.is_set():
+                     return
+                 snapshot = capture_measured_pose()
++                if loaded_gripper_session['active']:
++                    # 正常结束、取消和看门狗退出都保留此刻目标；放置已松爪时保留松爪目标，不能重新夹紧。
++                    snapshot = with_gripper_targets(snapshot, capture_gripper_targets())
++                elif preserve_closing_grippers:
++                    # 抓取正常结束：只保留已下发的闭合目标，不把负载下的实际开口当作新目标。
++                    # 腰腿/双臂/头部仍锁存实测位置；普通VR、故障和看门狗退出行为不变。
++                    import math
++                    stable=list(snapshot)
++                    for i,state in ((4,shared_state_manager.left_gripper_state),(5,shared_state_manager.right_gripper_state)):
++                        target=tuple(float(v) for v in state.get_target_joint_positions())
++                        actual=snapshot[i]
++                        if len(target)!=len(actual) or any(not math.isfinite(v) for v in target+actual):
++                            raise RuntimeError('invalid grasp jaw handoff feedback/target')
++                        stable[i]=tuple(max(a,t) if 10.<=t<=330. else a for a,t in zip(actual,target))
++                    snapshot=tuple(stable)
+                 hold_pose(snapshot)
+                 time.sleep(0.10)
+                 state = shared_state_manager.get_control_state()
+@@ -398,15 +429,32 @@
+                 elif state != ControlState.ASYNC:
+                     raise RuntimeError(f"unexpected control state on exit: {state}")
+                 independent_sync_active.clear()
++                loaded_gripper_session['active'] = False
+                 independent_sync_last_heartbeat['time'] = 0.0
+                 print(
+                     f"[{TOPIC_NODE_ID}] Independent SYNC session exited safely: "
+                     f"measured pose held, state=ASYNC, reason={reason}"
+                 )
+ 
++        def grasp_finish_callback(request,response):
++            if request.data:
++                response.success=False;response.message="finish-only service does not enable motion";return response
++            try:
++                if not independent_sync_active.is_set():
++                    raise RuntimeError("no active SYNC grasp session")
++                exit_independent_sync_session("grasp complete; retain closing jaw target",preserve_closing_grippers=True)
++                response.success=True;response.message="body measured hold; closing gripper targets retained; ASYNC"
++            except Exception as exc:
++                response.success=False;response.message=str(exc)
++            return response
++
++        ros_state['node'].create_service(
++            SetBool,f"/control_independent_sync_grasp_finish_{TOPIC_NODE_ID}",
++            grasp_finish_callback,callback_group=sync_transition_group)
++
+         ros_state['sync_exit'] = exit_independent_sync_session
+ 
+-        def independent_sync_session_callback(request, response, *, clear_errors=True):
++        def independent_sync_session_callback(request, response, *, clear_errors=True, preserve_gripper_targets=False):
+             if not request.data:
+                 try:
+                     exit_independent_sync_session("explicit service request")
+@@ -421,6 +469,10 @@
+                 if independent_sync_active.is_set():
+                     actual_state = shared_state_manager.get_control_state()
+                     if actual_state == ControlState.SYNC:
++                        if preserve_gripper_targets != loaded_gripper_session['active']:
++                            response.success = False
++                            response.message = 'active SYNC session belongs to a different handoff mode'
++                            return response
+                         response.success = True
+                         response.message = (
+                             "independent SYNC session is active and vendor "
+@@ -430,6 +482,17 @@
+                     independent_sync_active.clear()
+                     independent_sync_last_heartbeat['time'] = 0.0
+ 
++                # 必须在任何目标写入之前锁存并核验；无效时不进入会话、不覆盖原目标。
++                try:
++                    retained = capture_gripper_targets() if preserve_gripper_targets else None
++                except Exception as exc:
++                    response.success = False
++                    response.message = str(exc)
++                    return response
++                def entry_snapshot():
++                    measured = capture_measured_pose()
++                    return with_gripper_targets(measured, retained) if retained is not None else measured
++                loaded_gripper_session['active'] = preserve_gripper_targets
+                 independent_sync_active.set()
+                 try:
+                     if shared_state_manager.is_protected():
+@@ -447,7 +510,7 @@
+ 
+                     state = shared_state_manager.get_control_state()
+                     if state == ControlState.SYNC:
+-                        snapshot = capture_measured_pose()
++                        snapshot = entry_snapshot()
+                         hold_pose(snapshot)
+                         shared_state_manager.set_control_state(ControlState.ASYNC)
+                         state = ControlState.ASYNC
+@@ -457,7 +520,7 @@
+                     if state != ControlState.ASYNC:
+                         raise RuntimeError(f"SYNC entry requires ASYNC, got {state}")
+ 
+-                    snapshot_all = capture_measured_pose()
++                    snapshot_all = entry_snapshot()
+                     hold_pose(snapshot_all)
+                     stability_snapshot = capture_stability_pose()
+                     # Legacy callers retain their existing recovery behavior.
+@@ -503,7 +566,7 @@
+                         raise RuntimeError("control state changed while waiting in HOME")
+                     if shared_state_manager.is_protected():
+                         raise RuntimeError('vendor heartbeat protection became active')
+-                    hold_pose(capture_measured_pose())
++                    hold_pose(entry_snapshot())
+                     shared_state_manager.set_control_state(ControlState.SYNC)
+                     independent_sync_last_heartbeat['time'] = time.monotonic()
+                     response.success = True
+@@ -515,13 +578,14 @@
+                     return response
+                 except Exception as exc:
+                     try:
+-                        hold_pose(capture_measured_pose())
++                        hold_pose(entry_snapshot())
+                         state = shared_state_manager.get_control_state()
+                         if state in (ControlState.SYNC, ControlState.HOME):
+                             shared_state_manager.set_control_state(ControlState.ASYNC)
+                     except Exception as rollback_exc:
+                         print(f"[{TOPIC_NODE_ID}] SYNC rollback failed: {rollback_exc}")
+                     independent_sync_active.clear()
++                    loaded_gripper_session['active'] = False
+                     independent_sync_last_heartbeat['time'] = 0.0
+                     response.success = False
+                     response.message = f"guarded SYNC entry failed: {exc}"
+@@ -539,6 +603,14 @@
+             f"/control_independent_sync_hold_session_{TOPIC_NODE_ID}",
+             lambda request, response: independent_sync_session_callback(
+                 request, response, clear_errors=False
++            ),
++            callback_group=sync_transition_group,
++        )
++        ros_state['node'].create_service(
++            SetBool,
++            f"/control_independent_sync_loaded_session_{TOPIC_NODE_ID}",
++            lambda request, response: independent_sync_session_callback(
++                request, response, clear_errors=False, preserve_gripper_targets=True
+             ),
+             callback_group=sync_transition_group,
+         )

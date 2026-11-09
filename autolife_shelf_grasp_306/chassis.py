@@ -42,18 +42,18 @@ def main():
     from autolife_handeye_calibration_306.bridge import competing_controller
 
     rclpy.init();node=Node('shelf_grasp_chassis_306')
-    direct=node.create_publisher(Twist,'/topic_gv_target_cmd_vel_0_306',1)
+    direct=node.create_publisher(Twist,'/topic_gv_target_cmd_vel_0_345',1)
     manual=node.create_publisher(Twist,'/manual_cmd_vel',1)
     override=node.create_publisher(Bool,'/manual_cmd_vel_active',1)
-    lease=ChassisControlLease(domain_id='0',robot_id='306')
+    lease=ChassisControlLease(domain_id='0',robot_id='345')
     client=redis.Redis(host='127.0.0.1',socket_timeout=.15,socket_connect_timeout=.15)
     state={'odom':0.,'stationary_since':None,'vendor_nav':False,'actions':{}}
     def odom(msg):
         now=time.monotonic();state['odom']=now;v=msg.twist.twist
         still=math.hypot(v.linear.x,v.linear.y)<.015 and abs(v.angular.z)<.025
         state['stationary_since']=(state['stationary_since'] or now) if still else None
-    node.create_subscription(Odometry,'/topic_gv_wheel_odom_0_306',odom,qos_profile_sensor_data)
-    node.create_subscription(Bool,'/robot_navigation_0_306/is_navigating',lambda m:state.update(vendor_nav=m.data),10)
+    node.create_subscription(Odometry,'/topic_gv_wheel_odom_0_345',odom,qos_profile_sensor_data)
+    node.create_subscription(Bool,'/robot_navigation_0_345/is_navigating',lambda m:state.update(vendor_nav=m.data),10)
     for topic in ('/navigate_to_pose/_action/status','/navigate_through_poses/_action/status','/dock_robot/_action/status'):
         node.create_subscription(GoalStatusArray,topic,
             lambda m,t=topic:state['actions'].update({t:any(s.status in (1,2,3) for s in m.status_list)}),

@@ -95,8 +95,8 @@ def scan_points(ranges,angle_min,increment,range_min,range_max,front):
     if valid.mean()<.2:raise ValueError('有效激光数据不足')
     a=angle_min+np.arange(len(r))*increment;keep=np.isfinite(r)&valid
     x=r[keep]*np.cos(a[keep]);y=r[keep]*np.sin(a[keep])
-    # Same fixed mounting as robot306 bringup_localization.launch.py.
-    points=np.column_stack([.215-x,y]) if front else np.column_stack([-.215+x,-y])
+    # S3 front scan is level in base axes; rear remains inverted.
+    points=np.column_stack([.2634+x,y]) if front else np.column_stack([-.215+x,-y])
     # Match control_center_navigation/config/navigation_self_filter.yaml:
     # strictly inside the chassis, NOT the padded 50cm collision footprint.
     # Discard self hits only; do not convert them to free-space observations.
@@ -116,7 +116,7 @@ def clearance(points,velocity):
     horizon=REACTION_TIME+max(linear/LINEAR_ACCEL,angular/ANGULAR_ACCEL)
     steps=max(1,int(math.ceil(horizon/.02)));dt=horizon/steps
     # Pad by maximum within-sample travel so discretization cannot miss a narrow return.
-    half=.28+(linear+angular*math.sqrt(2)*.28)*dt/2
+    half=.34+(linear+angular*math.sqrt(2)*.34)*dt/2
     center=np.zeros(2);yaw=0.
     for i in range(steps+1):
         c,s=math.cos(yaw),math.sin(yaw)
@@ -158,3 +158,4 @@ class ObstacleHold:
             if now-self.since>=self.timeout:raise ValueError('运动范围内障碍持续30秒，已停止；清理后可重试本节点')
             return [0.,0.,0.]
         return list(command)
+

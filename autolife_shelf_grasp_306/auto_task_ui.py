@@ -6,6 +6,7 @@ from copy import deepcopy
 from PyQt5 import QtCore as C, QtGui as G, QtWidgets as Q
 from .core import atomic_json
 from .task_flow import validate, KINDS
+from .task_capabilities import require_perception, needs_grasp_preparation
 
 
 from .task_display import TaskDisplay
@@ -36,7 +37,7 @@ class AutomaticTaskPage(Q.QWidget):
         layout.addWidget(self.display_direction)
         self.display_direction.currentIndexChanged.connect(lambda: self.display.relayout() if self.display else None)
         self.steps = Q.QListWidget(); layout.addWidget(self.steps, 1)
-        self.state = Q.QLabel('选择流程后启动；每轮重新识别、规划与执行。'); self.state.setWordWrap(True)
+        self.state = Q.QLabel('选择流程后按顺序执行；预录制动作与航点导航无需 CUDA。'); self.state.setWordWrap(True)
         self.state.setStyleSheet('font-size:19px;padding:12px;background:#e5f3f4;color:#123e50;'); layout.addWidget(self.state)
         row = Q.QHBoxLayout()
         self.single = Q.QPushButton('启动单次'); self.single.clicked.connect(lambda: self.start('single'))
@@ -47,7 +48,7 @@ class AutomaticTaskPage(Q.QWidget):
         self.pause_button=Q.QPushButton('暂停任务');self.pause_button.clicked.connect(self.toggle_pause);layout.addWidget(self.pause_button)
         self.stop_button = Q.QPushButton('紧急停止任务'); self.stop_button.setObjectName('stop')
         self.stop_button.setMinimumHeight(54); self.stop_button.clicked.connect(self.stop); layout.addWidget(self.stop_button)
-        note = Q.QLabel('新任务从空载开始：归档旧持物记录，检查并自动复位准备。异常停止循环。\n关闭 Logo 窗口会停止任务；Esc 仅退出全屏。危险时使用实体急停。')
+        note = Q.QLabel('含视觉抓取的任务从空载开始，并自动复位准备；纯动作/导航任务直接按步骤执行。异常停止循环。\n关闭 Logo 窗口会停止任务；Esc 仅退出全屏。危险时使用实体急停。')
         note.setWordWrap(True); layout.addWidget(note)
         self.names.currentTextChanged.connect(self.preview)
         self.library = {}; self.refresh_library()
@@ -88,7 +89,7 @@ class AutomaticTaskPage(Q.QWidget):
 
     def available(self):
         o = self.owner
-        return (o.ready and not o.busy and o.motion is None and not o.cancel_pending
+        return (not o.busy and o.motion is None and not o.cancel_pending
                 and not o.demo_active and not o.placement_active and not o.workflow.active
                 and not o.workflow.base.moving() and not o.studio.moving() and not o.navigation.inflight
                 and o.chassis_dialog is None)
@@ -98,10 +99,12 @@ class AutomaticTaskPage(Q.QWidget):
         try:
             if not self.available(): raise ValueError('请等待当前操作停止、后台就绪后再启动')
             record = deepcopy(self.record) if repeat else validate(self.library[self.names.currentText()])
+            require_perception(self.owner, record)
             name = self.task_name if repeat else self.names.currentText()
             if mode not in ('single', 'loop'): raise ValueError('运行模式无效')
             if not confirmed:
-                text = ('单次执行' if mode == 'single' else '自动循环执行')+'流程“'+name+'”。\n将清理旧持物记录并自动复位张开夹爪。请确认双爪空载、场地适合运行，人员离开运动范围。'
+                preparation=('将清理旧持物记录并自动复位张开夹爪，请确认双爪空载。' if needs_grasp_preparation(record) else '将按步骤执行；不会额外进行抓取复位或张开夹爪。')
+                text = ('单次执行' if mode == 'single' else '自动循环执行')+'流程“'+name+'”。\n'+preparation+'请确认场地适合运行，人员离开运动范围。'
                 if Q.QMessageBox.question(self, '开始自动任务', text, defaultButton=Q.QMessageBox.No) != Q.QMessageBox.Yes: return
             if not self.available(): raise ValueError('确认期间状态已改变，请等待操作停止后再启动')
             self.owner.invalidate_plan(); self.owner.studio.release()
@@ -157,7 +160,8 @@ class AutomaticTaskPage(Q.QWidget):
         if self.active and not self.paused and self.phase == 'waiting' and time.monotonic() >= self.deadline:
             if self.available():
                 try:
-                    if not self.round_prepared:
+                    require_perception(self.owner, self.record)
+                    if not self.round_prepared and needs_grasp_preparation(self.record):
                         from .task_pause import archive_held
                         archive_held(self.owner.run)
                         (self.owner.run/'stop').unlink(missing_ok=True)
@@ -188,7 +192,7 @@ class AutomaticTaskPage(Q.QWidget):
                     if cursor and cursor.active else '处理中')
             phase = {'prepare':'复位准备','prepare_navigation':'出发准备','navigate':'导航行驶',
                      'scan':'识别物品','plan':'规划抓取','confirm':'准备执行抓取','grasp':'抓取执行',
-                     'place':'识别桌面 / 规划并放置','action':'执行固定动作','posture':'身体与头部调姿',
+                     'place':'识别桌面 / 规划并放置','action':'执行示教动作','posture':'身体与头部调姿',
                      'base':'执行底盘定量动作'}.get(flow.phase,'处理中')
             text = f'第 {self.completed+1} 轮 · {step}\n{phase} · '+self.owner.flow_label.text()
         elif self.phase == 'waiting':

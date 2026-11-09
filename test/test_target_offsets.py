@@ -9,8 +9,8 @@ from autolife_shelf_grasp_306 import arm_selection as arms
 def test_direction_units_and_legacy_not_added_twice():
     p=defaults({'arm':'left','target_offset_torso_mm':[0,15,0]})
     assert p=={'left':[0,15,0],'right':[0,0,0]}
-    assert description(p['left'])=='向右15mm'
-    assert from_display(10,-15,8)==[10,-15,-8]
+    assert description(p['left'])=='向左15mm'
+    assert from_display(10,-15,8)==[10,15,8]
     assert to_display(from_display(10,-15,8))==[10,-15,8]
     for value in ({'left':[float('nan'),0,0],'right':[0,0,0]}, {'left':[40,40,0],'right':[0,0,0]}):
         with pytest.raises(ValueError):checked_profiles(value)
@@ -47,10 +47,10 @@ def test_editor_persistence_invalidation_and_command_snapshot(tmp_path):
         for spin,text in zip(widget.spins,['10','-15','8']):
             assert spin.isEnabled()
             spin.lineEdit().setFocus();spin.lineEdit().selectAll();QTest.keyClicks(spin.lineEdit(),text);QTest.keyClick(spin.lineEdit(),C.Qt.Key_Tab)
-        assert widget.profiles()['left']==[10,-15,-8] and w.pending_plan is None
+        assert widget.profiles()['left']==[10,15,8] and w.pending_plan is None
         widget.arm.setCurrentIndex(1);assert [s.value() for s in widget.spins]==[0,0,0]
         widget.spins[0].setValue(5)
-        assert widget.profiles()['left']==[10,-15,-8] and widget.profiles()['right']==[5,0,0]
+        assert widget.profiles()['left']==[10,15,8] and widget.profiles()['right']==[5,0,0]
         packets=[]
         w.process=NS(write=lambda b:packets.append(json.loads(b)))
         w.send('plan',id=123)
@@ -59,7 +59,7 @@ def test_editor_persistence_invalidation_and_command_snapshot(tmp_path):
         w.process=None
     finally:w.process=None;w.close();app.processEvents()
     w=Window(root,run,start_worker=False);w.timer.stop()
-    try:assert w.target_offsets.profiles()=={'left':[10,-15,-8],'right':[5,0,0]}
+    try:assert w.target_offsets.profiles()=={'left':[10,15,8],'right':[5,0,0]}
     finally:w.close();app.processEvents()
 
 def test_real_robot_torso_axes():
@@ -71,5 +71,5 @@ def test_real_robot_torso_axes():
     r=fk.fk('Link_Zero_Point',TORSO,q)[:3,:3]
     print('Torso rotation at zero joints:',r.tolist())
     print('Camera mount in torso:',fk.fk(TORSO,MOUNT,q)[:3,3].tolist())
-    assert r[2,2]<-.99
+    assert r[2,2]>.99
     assert fk.fk(TORSO,MOUNT,q)[0,3]>0

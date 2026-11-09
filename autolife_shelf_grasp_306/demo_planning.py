@@ -361,9 +361,10 @@ def checked_transfer_approach(planner,source,goal,tcp,up,check):
 
 
 def plan_place(planner,source,tcp,grasp,points,table,settings):
+    planner.guard.begin_fixed_neck(source)
     product=grasp['product'];require_placeable(product)
-    if grasp.get('geometry',{}).get('image_cropped'):
-        raise ValueError('本轮瓶子未完整入镜，瓶底到夹取点未知；不能自动放置')
+    from .demo_config import require_placement_bottom
+    require_placement_bottom(grasp)
     cfg=planner.cfg;up=np.asarray(cfg['up_torso']);tcp=np.asarray(tcp)
     ground=planner.fk.fk('Link_Zero_Point',TORSO,source);inv=np.linalg.inv(ground)
     centers=np.asarray(points)@inv[:3,:3].T+inv[:3,3]

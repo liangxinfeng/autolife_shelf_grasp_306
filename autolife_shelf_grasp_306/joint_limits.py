@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 def load_arm_policy(cfg, names, ui_limits):
     model_path = Path(cfg['urdf_path'])
     vendor_path = Path(cfg['vendor_control_config']) if cfg.get('vendor_control_config') else (
-        Path(cfg['vendor_python_path']) / 'autolife_robot_arm/configs/robot_v2_2.json')
+        Path(cfg['vendor_python_path']) / 'autolife_robot_arm/configs/robot_v3_1.json')
     model_bytes = model_path.read_bytes()
     vendor_bytes = vendor_path.read_bytes()
     model = ET.fromstring(model_bytes)

@@ -81,8 +81,8 @@ def test_unknown_solid_uses_observed_top_not_fake_thickness(monkeypatch):
     with pytest.raises(DepthQualityError):estimate_temporary({},mask,T,[0,0,1],template,{})
 
 
-def test_unregistered_cropped_target_rejected_without_guessing():
-    with pytest.raises(ValueError,match='完整入镜'):
+def test_unregistered_cropped_target_still_needs_actual_depth():
+    with pytest.raises(ValueError,match='同帧深度'):
         estimate_temporary({},np.ones((120,120),bool),np.eye(4),[0,0,1],temporary_product(item(),'s'),{})
 
 

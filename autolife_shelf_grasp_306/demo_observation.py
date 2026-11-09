@@ -23,6 +23,7 @@ def coverage(center,product,camera,roi):
 
 def plan_observation(planner,source,tcp,grasp,table,camera,roi):
     """Lift 6--12 cm, optionally outward <=8 cm, only if visibility improves."""
+    planner.guard.begin_fixed_neck(source)
     tcp=np.asarray(tcp);cfg=planner.cfg;product=grasp['product'];up=np.asarray(cfg['up_torso'])
     ground=planner.fk.fk('Link_Zero_Point',TORSO,source)
     start,R=planner.pose(source,tcp);grasp_R=planner.pose(grasp['segments'][1]['waypoints'][-1],tcp)[1]

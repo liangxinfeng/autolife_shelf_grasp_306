@@ -39,8 +39,8 @@ def main():
                            [v.linear.x,v.linear.y,v.angular.z],stamp)
         def scan(m,front):
             try:
-                expected='front_laser_frame' if front else 'rear_laser_frame'
-                if m.header.frame_id.lstrip('/')!=expected:raise ValueError('激光坐标系与306安装方向不匹配')
+                expected='s3_front_scan_frame' if front else 'rear_laser_frame'
+                if m.header.frame_id.lstrip('/')!=expected:raise ValueError('激光坐标系与345 S3安装方向不匹配')
                 stamp=(m.header.stamp.sec,m.header.stamp.nanosec)
                 old=state['scans'].get(front)
                 if old and old[2]==stamp:return
@@ -48,9 +48,9 @@ def main():
                 state['scans'][front]=(time.monotonic(),points,stamp)
                 state['errors'].pop(front,None)
             except ValueError as exc:state['errors'][front]=str(exc)
-        node.create_subscription(Odometry,'/topic_gv_wheel_odom_0_306',odom,qos)
+        node.create_subscription(Odometry,'/topic_gv_wheel_odom_0_345',odom,qos)
         for front,side in ((True,'front'),(False,'rear')):
-            node.create_subscription(LaserScan,f'/topic_gv_{side}_lidar_0_306',lambda m,f=front:scan(m,f),qos)
+            node.create_subscription(LaserScan,f'/topic_gv_{side}_lidar_0_345',lambda m,f=front:scan(m,f),qos)
         helper=subprocess.Popen([sys.executable,'-m','autolife_shelf_grasp_306.chassis','--fixed-sequence'],stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE,stderr=sys.stderr,text=True,bufsize=1)
         def reports():

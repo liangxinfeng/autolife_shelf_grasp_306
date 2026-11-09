@@ -41,9 +41,12 @@ def main():
             from .robot import Robot
             from .planning import Planner
             from autolife_handeye_calibration_306.core import Kinematics,TORSO,BODY,NECK
-            from autolife_handeye_calibration_306.verification_core import camera_transform,load_geometry
+            from .grasp_geometry import camera_transform,load_geometry,uses_urdf
             import rclpy
             cfg=yaml.safe_load((root/'config/grasp.yaml').read_text('utf-8'))
+            if Path(cfg['gripper_width_calibration']).is_file():
+                from .grip_width import calibrated_max_width
+                cfg['gripper_max_width_m']=calibrated_max_width(cfg)
             runtime_path=root/'data/settings.json'
             mode='all';task_recognition=None
             cfg['semantic_prompt_overrides']={}
@@ -66,11 +69,11 @@ def main():
             try:
                 perception=Perception(cfg,root)
             except Exception as exc:
-                # Keep RGB, but never accept planning/motion in degraded mode.
+                # Keep RGB. Task/action/navigation executors are independent of this worker.
                 import traceback
                 traceback.print_exc(file=sys.stderr)
                 error='识别不可用（保留RGB预览）：'+str(exc)
-                emit('fatal',text=error)
+                emit('vision_unavailable',text=error)
                 while True:
                     cmd=commands.get()
                     if cmd.get('action')=='quit':break
@@ -80,14 +83,16 @@ def main():
             display_fk=Kinematics(cfg['urdf_path'])
             profiles=CalibrationProfiles(cfg,fk)
             calibration=None;calibration_sha=None;tcp=None
-            if Path(cfg['calibration']).is_file():
+            if uses_urdf(cfg) or Path(cfg['calibration']).is_file():
                 calibration,calibration_sha=profiles.resolve(cfg)
                 tcp=load_geometry(calibration,fk,cfg['tcp_offset_mm'],robot_id=cfg.get('robot_id'))
-            planner=None;scene=None;items=[];selected=None;plan=None
+            from .workspace_reset import resolve as resolve_workspace_reset
+            cfg=resolve_workspace_reset(root,cfg)
+            planner=None;scene=None;items=[];selected=None;plan=None;point_frame=None;point_token=None;point_time=0.
             arm_pool=ArmPlannerPool(cfg,calibration,fk,Planner,profiles)
             geometry_memory=GeometryMemory(root/'data/observed_geometry.json')
             emit('ready',blockers=execution_blockers(cfg),products=len(store.products),
-                 calibration=Path(cfg['calibration']).parent.name,mode=mode,
+                 calibration='本机URDF名义坐标（不读取手眼标定）' if uses_urdf(cfg) else Path(cfg['calibration']).parent.name,mode=mode,
                  detector_backend=cfg.get('detector_backend'),semantic_prompt=cfg['semantic_prompt_overrides'].get(mode,''))
             def snapshot(depth=False):
                 deadline=time.monotonic()+1.5
@@ -128,6 +133,8 @@ def main():
                          'dimensions_mm':([v['product']['diameter_m']*1000,v['product']['height_m']*1000,
                             v['product'].get('depth_m',v['product']['diameter_m'])*1000] if v['product'] else None),
                          'grasp_fraction':v.get('grasp_fraction'),
+                         'point_selection':bool(v.get('point_selection')),'suggested_name':v.get('suggested_name',''),
+                         'visual_description':v.get('visual_description',''),
                          'score':round(v['match']['score'],3)} for v in items]
             def catalog():
                 return [{k:v for k,v in p.items() if k!='features'} | {'category':product_category(p)} for p in store.products]
@@ -136,7 +143,7 @@ def main():
                 for item in items:
                     m=match(item['feature'],available,cfg['match_threshold'],cfg['match_margin'])
                     p=next((p for p in available if p['id']==m['id']),None)
-                    item.update(product=p,match=m,name=p['name'] if p else '未录入 / 待确认')
+                    item.update(product=p,match=m,name=p['name'] if p else item.get('name','未录入 / 待确认') if item.get('point_selection') else '未录入 / 待确认')
                     item.pop('grasp_fraction',None)
             while True:
                 try:cmd=commands.get(timeout=.2)
@@ -145,23 +152,43 @@ def main():
                 try:
                     action=cmd['action']
                     if action=='quit':break
+                    updated_cfg=resolve_workspace_reset(root,cfg)
+                    reset_changed=any(updated_cfg.get(k)!=cfg.get(k) for k in ('workspace_reset_sha256','workspace_pose_speed_percent'))
+                    cfg=updated_cfg
+                    if reset_changed:
+                        planner=None;plan=None
+                        arm_pool.close()
+                        arm_pool=ArmPlannerPool(cfg,calibration,fk,Planner,profiles)
+                    if (action=='prepare' or action=='auto_prepare' and cfg.get('require_reset_before_grasp',True)) and not cfg.get('workspace_reset_joints'):
+                        raise ValueError('请先在“姿态与动作”中调好实机姿态，并点击“将当前姿态设为复位姿态”；不会自动采用旧复位目标')
+                    if action in ('prepare','auto_prepare','scan','scan_task','plan'):
+                        emit('status',text='读取真实关节位置…')
+                        robot.refresh_measured()
                     if action=='auto_prepare':
                         from .prepare import ready_after_place,checked_reset_plan
                         q=robot.sample(stationary=True)
-                        if ready_after_place(cfg,q):
+                        if not cfg.get('require_reset_before_grasp',True):
+                            # 自动任务也从当前姿态开始；不伪造一次已执行的复位凭据。
+                            emit('auto_prepared',request_id=ident,start_mode='current_pose')
+                        elif ready_after_place(cfg,q):
                             atomic_json(run/'prepare_result.json',dict(status='prepared',q=q,token=uuid.uuid4().hex,time=time.monotonic(),source='automatic_checked'))
                             emit('auto_prepared',request_id=ident)
                         else:
                             plan=None;scene=None;items=[];selected=None
-                            if planner is None:planner=Planner(cfg)
+                            # 抓取规划器可能携带另一手的几何快照；复位独立使用本次设置。
+                            planner=Planner(cfg)
                             result=checked_reset_plan(planner,cfg,q)
+                            result['static_neck_overlap']=list(getattr(planner.guard,'static_neck_pairs',[]))
                             atomic_json(root/'data/last_reset_plan.json',result)
                             emit('reset_planned',request_id=ident,mode='hold_then_vr',blockers=reset_blockers(cfg))
                     elif action=='prepare':
                         from .prepare import checked_reset_plan
                         plan=None;scene=None;items=[];selected=None
-                        if planner is None:planner=Planner(cfg)
-                        result=checked_reset_plan(planner,cfg,robot.sample(stationary=True))
+                        # 不复用自动选手返回的规划器，防止旧臂形和旧速度混入复位。
+                        planner=Planner(cfg)
+                        result=checked_reset_plan(planner,cfg,robot.sample(stationary=True),
+                            operator_supported=cmd.get('operator_supported_neck_recovery') is True)
+                        result['static_neck_overlap']=list(getattr(planner.guard,'static_neck_pairs',[]))
                         atomic_json(root/'data/last_reset_plan.json',result)
                         emit('reset_planned',request_id=ident,mode='hold_then_vr',blockers=reset_blockers(cfg))
                     elif action=='prepared':
@@ -194,7 +221,7 @@ def main():
                         # restoring held-arm geometry must not lose current prompts.
                         cfg.update({k:v for k,v in grasp['config'].items() if k!='semantic_prompt_overrides'})
                         if grasp.get('calibration_sha256')!=calibration_sha:
-                            raise ValueError('抓取后相机标定改变，请检查持物记录')
+                            raise ValueError('抓取后相机坐标来源改变，请重新规划放置')
                         tcp=np.asarray(grasp.get('physical_tcp',grasp['tcp']),float)
                         planner=arm_pool.for_config(cfg)
                         attempt_path=run/'observation_attempt.json'
@@ -338,6 +365,22 @@ def main():
                              product_id=plan['product']['id'],pixels=pixels,shape=list(frame['image'].shape),
                              table_height=table['coef'][2],seconds=plan['seconds'],
                              table_segmentation=dict(id=0,name='放置桌面',box=table_item['box'],mask_contours=display_contours(table_item)))
+                    elif action=='point_prepare':
+                        plan=None;selected=None;items=[];point_frame=snapshot(depth=True)
+                        point_token=uuid.uuid4().hex;point_time=time.monotonic()
+                        cv2.imwrite(str(run/'point_scene.png'),point_frame['image'])
+                        emit('point_ready',request_id=ident,token=point_token,shape=list(point_frame['image'].shape))
+                    elif action=='segment_point':
+                        if point_frame is None or cmd.get('token')!=point_token or time.monotonic()-point_time>90:
+                            raise ValueError('点选画面已过期，请重新点击“点选物体”取景')
+                        from .point_selection import segment
+                        started=time.monotonic();store.reload();scene=point_frame;point_frame=None;point_token=None
+                        items=[segment(perception,scene,store,cmd['x'],cmd['y'])];plan=None;selected=None
+                        task_recognition=None
+                        cv2.imwrite(str(run/'scene.jpg'),scene['image'])
+                        camera.overlay.set(scene,overlay_items(items),ident)
+                        emit('scene',request_id=ident,items=public_items(),shape=list(scene['image'].shape),
+                             elapsed_ms=(time.monotonic()-started)*1000,select_id=items[0]['id'],point_selection=True)
                     elif action in ('scan','set_mode','set_prompt','scan_task'):
                         task_recognition=None
                         if action=='scan_task':
@@ -397,9 +440,12 @@ def main():
                         camera.overlay.rename(overlay_items(items),ident)
                         emit('enrolled',request_id=ident,text='袋口夹取点已设置；请先预览路径',items=public_items(),select_id=item['id'])
                     elif action=='plan':
+                        from .grasp_speed import checked_percent
+                        cfg['grasp_speed_percent']=checked_percent(cmd.get('grasp_speed_percent',100.))
                         # Begin each request from the unchanged base (left) profile.
                         # The chosen arm then owns camera extrinsics AND its TCP.
-                        cfg['calibration']=profiles.base['calibration']
+                        cfg['calibration']=profiles.base.get('calibration','')
+                        cfg['arm']=profiles.base.get('arm','left')
                         calibration,calibration_sha=profiles.resolve(cfg)
                         from .target_offsets import checked_profiles,defaults
                         cfg['target_offsets_by_arm_torso_mm']=checked_profiles(cmd.get('target_offsets_by_arm_torso_mm',defaults(arm_pool.base)))
@@ -408,7 +454,11 @@ def main():
                         chosen=next(v for v in items if v['id']==int(cmd['id']))
                         emit('status',text='重新识别目标并检查深度…')
                         # Re-detect current target. Never execute a cached bounding box.
-                        store.reload();frame=snapshot(depth=True);fresh,_=infer_scene(perception,frame,store,mode,task_recognition)
+                        store.reload();frame=snapshot(depth=True)
+                        if chosen.get('point_selection'):
+                            from .point_selection import reobserve
+                            fresh=reobserve(perception,frame,store,chosen)
+                        else:fresh,_=infer_scene(perception,frame,store,mode,task_recognition)
                         from .selection import resolve_selected
                         selected,identity=resolve_selected(chosen,fresh)
                         atomic_json(run/'target_identity.json',identity)
@@ -432,6 +482,10 @@ def main():
                             if np.linalg.norm(np.asarray(grasp_pixel)-old_pixel)>8:
                                 raise ValueError('袋口或分割轮廓已变化，请重新识别并选择袋口夹取点')
                             if not selected['mask'][int(grasp_pixel[1]),int(grasp_pixel[0])]:raise ValueError('袋口形状/位置改变，请重新选择夹取点')
+                        grasp_base_anchor=None
+                        if cfg.get('grasp_backend')=='vendor_ik_trajectory':
+                            from .demo_protocol import check_base_anchor
+                            grasp_base_anchor=robot.base_sample()
                         samples=[];ids=set();quality_rejections=[];deadline=time.monotonic()+3.;mask=selected['mask'];source_q=None
                         paired_frames=[];measured_product=copy.deepcopy(selected['product'])
                         fused=None;fusion_error='';fused_product=None
@@ -443,6 +497,7 @@ def main():
                             if max(abs(q[n]-source_q[n]) for n in BODY+NECK)>.5:raise ValueError('身体或头部已移动，请重新规划')
                             up=fk.fk('Link_Zero_Point',TORSO,q)[:3,:3].T@np.array([0.,0.,1.])
                             ids.add(frame['frame_id'])
+                            if grasp_base_anchor is not None:check_base_anchor(robot.base_sample(),grasp_base_anchor)
                             paired_frames.append((frame,dict(q),up.copy()))
                             try:
                                 if temporary:sample=estimate_temporary(frame,mask,T,up,selected['product'],cfg,dimension_reference)
@@ -471,7 +526,7 @@ def main():
                             'fused_product':fused_product if fused is not None else None,
                             'accepted_frames':[{'center':np.asarray(c).tolist(),**stats} for c,stats in samples]})
                         if len(samples)<5 and quality_rejections:
-                            raise CandidateUnavailable(f'仅{len(samples)}/{len(ids)}帧深度合格，未生成运动路径；'+quality_rejections[-1])
+                            raise CandidateUnavailable(f'已取得{len(ids)}帧RGB-D，{len(samples)}帧通过物体几何校验，未生成运动路径；'+quality_rejections[-1])
                         if fused is None:raise CandidateUnavailable(fusion_error or '有效深度帧不足，请重试当前步骤')
                         center,geometry=fused;cfg['up_torso']=up.tolist()
                         if temporary:
@@ -537,17 +592,22 @@ def main():
                             'model_load':round(planning_started-depth_finished,3),
                             'planning':round(time.monotonic()-planning_started,3),
                             'total':round(time.monotonic()-request_started,3)}
-                        plan['calibration']=cfg['calibration'];plan['created_monotonic']=time.monotonic()
-                        if hashlib.sha256(Path(cfg['calibration']).read_bytes()).hexdigest()!=calibration_sha:
-                            raise ValueError('标定文件已改变，请重开抓取程序')
+                        plan['calibration']=cfg.get('calibration','');plan['geometry_source']=cfg.get('geometry_source','urdf');plan['created_monotonic']=time.monotonic()
+                        if profiles.resolve(cfg)[1]!=calibration_sha:
+                            raise ValueError('几何来源已改变，请重开抓取程序')
                         plan['calibration_sha256']=calibration_sha;plan['tcp_offset_mm']=cfg['tcp_offset_mm']
+                        plan['static_neck_overlap']=list(getattr(planner.guard,'static_neck_pairs',[]))
                         plan['config']=dict(cfg);plan['frame_id']=frame['frame_id']
+                        if grasp_base_anchor is not None:
+                            check_base_anchor(robot.base_sample(),grasp_base_anchor)
+                            plan['base_anchor']=grasp_base_anchor
                         from .grip_width import closing_command
                         plan['grip_command']=closing_command(plan['grasp_width_m'],cmd.get('grip_tightening_mm',5.),cfg)
                         plan['geometry']=geometry
                         receipt_path=run/'prepare_result.json'
                         receipt=json.loads(receipt_path.read_text('utf-8')) if receipt_path.exists() else {}
                         plan['prepare_token']=receipt.get('token') if receipt.get('status')=='prepared' else None
+                        plan['start_mode']='reset_receipt' if cfg.get('require_reset_before_grasp',True) else 'current_pose'
                         plan['plan_id']=uuid.uuid4().hex;plan['run_id']=run.name
                         plan['instance_id']=selected['id'];plan['request_id']=ident
                         filename='plan_'+plan['plan_id']+'.json'
@@ -565,12 +625,15 @@ def main():
                              grip_command=plan['grip_command'],
                              arm=cfg['arm'],tool_geometry=cfg.get('tool_geometry',{}),
                              plan_id=plan['plan_id'],filename=filename,prepare_token=plan['prepare_token'],
+                             requires_reset=bool(cfg.get('require_reset_before_grasp',True)),start_mode=plan['start_mode'],
+                             target_offset_torso_mm=cfg['target_offset_torso_mm'],
                              target={'instance_id':selected['id'],'product_id':selected['product']['id'],'name':selected['name']},
                              estimated_dimensions_mm=([selected['product'][k]*1000 for k in ('diameter_m','height_m','depth_m')] if temporary else None),
                              orientation_mode=plan['orientation_mode'],orientation_deviation=plan['max_grasp_orientation_deviation_deg'],
                              approach_yaw_deg=plan['approach_yaw_deg'],
                              grasp_contact_mode=plan.get('grasp_contact_mode','center'),
                              partial_view=bool(geometry.get('image_cropped')),
+                             placement_bottom_observed=bool(selected['product'].get('placement_bottom_observed')),
                              geometry_reference=selected['product'].get('geometry_reference'),
                              contact_center=plan.get('contact_center',center.tolist()),
                              withdraw_orientation_mode=plan.get('withdraw_orientation_mode'),
@@ -578,7 +641,7 @@ def main():
                              max_withdraw_tilt_deg=plan.get('max_withdraw_tilt_deg',0.),
                              seconds=round(time.monotonic()-request_started,2),planning_seconds=plan['seconds'],
                              checked=plan['checked_states'],
-                             blockers=execution_blockers(cfg)+([] if plan['prepare_token'] else ['复位尚未成功，请先复位并准备']))
+                             blockers=execution_blockers(cfg)+([] if not cfg.get('require_reset_before_grasp',True) or plan['prepare_token'] else ['复位尚未成功，请先复位并准备']))
                     else:raise ValueError('未知操作')
                 except Exception as exc:
                     atomic_json(run/'last_error.json',{'action':cmd.get('action'),'request_id':ident,'reason':str(exc),'time':time.time()})
@@ -586,6 +649,7 @@ def main():
                                    candidate_unavailable=isinstance(exc,CandidateUnavailable))
         except Exception as exc:emit('fatal',text=str(exc))
         finally:
+            if 'arm_pool' in locals():arm_pool.close()
             if camera:camera.close()
             if robot:robot.close()
 

@@ -32,7 +32,7 @@ class TargetOffsets(Q.QGroupBox):
         side=self.arm.currentData()
         for spin,value in zip(self.spins,to_display(self.values[side])):
             spin.blockSignals(True);spin.setValue(value);spin.blockSignals(False)
-        self.hint.setText(self.problem or ('当前：'+description(self.values[side])+'\n机器人躯干方向，三轴叠加；不修改标定TCP。'))
+        self.hint.setText(self.problem or ('当前：'+description(self.values[side])+'\n机器人躯干方向，三轴叠加；不修改模型TCP。'))
 
     def profiles(self):
         if self.problem:raise ValueError(self.problem)

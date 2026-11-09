@@ -1,0 +1,17 @@
+{
+  "main.py": {
+    "base_sha256": "dab1bf014513a06ae78ac90c653da24c1fa8736d9bc1f4dc43e0e83d865219b6",
+    "installed_sha256": "30d0bed387a6c0b29042a17c4e30868803bafd3229103d9db1d49b4c403f55c6",
+    "patch": "main.py.patch",
+    "archived_base_sha256_before_lf_normalization": "dab1bf014513a06ae78ac90c653da24c1fa8736d9bc1f4dc43e0e83d865219b6"
+  },
+  "process_worker.py": {
+    "base_sha256": "6f27f81f3ba44f244c9a31dd3f2aae096de0beaf8bc8d61edcaa692123af2cb8",
+    "installed_sha256": "87f640f940e4996da1101da1fc758aeef008049abc24e47ac11138501e83abe5",
+    "patch": "process_worker.py.patch",
+    "archived_base_sha256_before_lf_normalization": "6f27f81f3ba44f244c9a31dd3f2aae096de0beaf8bc8d61edcaa692123af2cb8"
+  },
+  "grasp_feedback_refresh.py": {
+    "installed_sha256": "bf825a242ac12de90b18ab968e88714f92a603605d4b64d235945c8e3a949a76"
+  }
+}

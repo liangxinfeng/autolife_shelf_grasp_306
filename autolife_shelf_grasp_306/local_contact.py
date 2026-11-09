@@ -31,7 +31,7 @@ def prism(product):
 def swept_points(product,contact,forward,reach=.018):
     """Whole-height prism portion entered by fingertips, including near side.
 
-    robot_v2_2 fingers protrude 12.2 mm past calibrated TCP; 18 mm includes
+    robot_v3_1 fingers protrude 12.2 mm past calibrated TCP; 18 mm includes
     reserve. Farther material is not deleted from the held-object envelope.
     """
     p,edges=prism(product);d=(p-contact)@forward-reach

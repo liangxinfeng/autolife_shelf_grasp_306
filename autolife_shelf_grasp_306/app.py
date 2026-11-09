@@ -179,7 +179,8 @@ class CatalogDialog(Q.QDialog):
 class Window(DemoNavigation,Q.QWidget):
     def __init__(self,root,run,start_worker=True):
         super().__init__();self.root=Path(root);self.run=Path(run);self.buffer=b'';self.request=0;self.busy=True
-        self.ready=False;self.frozen=False;self.items=[];self.blockers=[];self.process=None;self.cancel_pending=False
+        self._point_pick=False;self._point_token=None
+        self.ready=False;self.vision_error='识别后台尚未就绪';self.frozen=False;self.items=[];self.blockers=[];self.process=None;self.cancel_pending=False
         # frozen retains the legacy "has selectable recognition" contract, but
         # never freezes RGB. Display tracking is independent of executable plans.
         self.overlay_revision=None;self.path_revision=None
@@ -208,7 +209,7 @@ class Window(DemoNavigation,Q.QWidget):
         self.badge=Q.QLabel('306 · 双臂自动选手');self.badge.setObjectName('muted');header.addWidget(self.badge);outer.addLayout(header)
         flow_row=Q.QHBoxLayout();outer.addLayout(flow_row)
         self.flow_button=Q.QPushButton('编排任务流程');flow_row.addWidget(self.flow_button)
-        self.flow_label=Q.QLabel('导航 → 抓取 → 导航 → 放置 / 固定动作');flow_row.addWidget(self.flow_label,1)
+        self.flow_label=Q.QLabel('导航 → 抓取 → 导航 → 放置 / 示教动作');flow_row.addWidget(self.flow_label,1)
         self.flow_label.setWordWrap(True)
         self.flow_retry=Q.QPushButton('重试当前步骤');self.flow_retry.setEnabled(False);flow_row.addWidget(self.flow_retry)
         self.flow_retry.clicked.connect(lambda:self.workflow.retry_current())
@@ -239,26 +240,38 @@ class Window(DemoNavigation,Q.QWidget):
         self.semantic.returnPressed.connect(self.change_prompt);right.addWidget(self.semantic_apply)
         grip_row=Q.QHBoxLayout();right.addLayout(grip_row);grip_row.addWidget(Q.QLabel('抓取收紧量'))
         self.grip_margin=NoWheelDoubleSpinBox();self.grip_margin.setRange(0,50);self.grip_margin.setDecimals(1);self.grip_margin.setSuffix(' mm')
-        self.grip_margin.setToolTip('闭合目标＝估计夹取宽度－收紧量；名义开度换算，非力度控制。固定动作记录不受影响。')
+        self.grip_margin.setToolTip('闭合目标＝估计夹取宽度－收紧量；名义开度换算，非力度控制。示教动作记录不受影响。')
         settings_path=self.root/'data/grip_settings.json'
         try:
             from .grip_width import checked_margin
             value=checked_margin(json.loads(settings_path.read_text('utf-8'))['tightening_mm']) if settings_path.exists() else 5.
         except (ValueError,KeyError,OSError):value=5.
         self.grip_margin.setValue(value);self.grip_margin.valueChanged.connect(self.grip_setting_changed);grip_row.addWidget(self.grip_margin)
+        speed_row=Q.QHBoxLayout();right.addLayout(speed_row);speed_row.addWidget(Q.QLabel('抓取运动速度'))
+        self.grasp_speed=Q.QSlider(C.Qt.Horizontal);self.grasp_speed.setRange(20,100);self.grasp_speed.setSingleStep(5)
+        self.grasp_speed.setToolTip('100%为当前抓取速度；调低可慢速试运行。仅影响接近与收回，不改变复位、夹爪及示教动作。修改后请重新规划。')
+        from .grasp_speed import read_percent
+        try:speed=int(read_percent(self.root))
+        except (ValueError,KeyError,OSError):speed=100
+        self.grasp_speed.setValue(speed);self.grasp_speed_value=Q.QLabel(f'{speed}%')
+        speed_row.addWidget(self.grasp_speed,1);speed_row.addWidget(self.grasp_speed_value)
+        self.grasp_speed.valueChanged.connect(self.grasp_speed_changed)
         from .target_offsets_ui import TargetOffsets
         self.target_offsets=TargetOffsets(self.root,self);right.addWidget(self.target_offsets)
         self.target_offsets.changed.connect(self.target_offsets_changed)
         self.list=Q.QListWidget();self.list.setMinimumHeight(130);self.list.setMaximumHeight(260)
         self.list.currentItemChanged.connect(self.select);right.addWidget(self.list,1)
         self.prepare=Q.QPushButton('复位并准备');self.prepare.clicked.connect(self.prepare_robot);actions.addWidget(self.prepare)
-        self.prepare.setToolTip('点击即执行：双臂和头部复位、双夹爪全开。请先取出物品并清空运动空间。腰腿不动。')
+        self.prepare.setToolTip('使用“姿态与动作→将当前姿态设为复位姿态”保存的全身目标，包含腰腿和夹爪；请先在新模块设置全身复位目标；速度与姿态执行共用。')
         self.scan=Q.QPushButton('识别物品');self.scan.setObjectName('primary');self.scan.clicked.connect(lambda:self.send('scan'));right.addWidget(self.scan)
+        self.point_select=Q.QPushButton('点选物体 · 不必知道名称')
+        self.point_select.setToolTip('先定格当前画面，再点物体中心。直接分割轮廓并给出可编辑的建议名称。')
+        self.point_select.clicked.connect(lambda:self.send('point_prepare'));right.addWidget(self.point_select)
         tools=Q.QHBoxLayout();right.addLayout(tools)
         self.enroll=Q.QPushButton('录入 / 追加');self.enroll.clicked.connect(lambda:self.enrollment());tools.addWidget(self.enroll)
         self.manage=Q.QPushButton('商品库');self.manage.clicked.connect(lambda:self.send('catalog'));tools.addWidget(self.manage)
         self.rim=Q.QPushButton('选择袋口夹取点');self.rim.clicked.connect(self.choose_rim);right.addWidget(self.rim)
-        right.addSpacing(10);self.flow=Q.QLabel('操作顺序：选择物品 → 规划预览 → 确认抓取');self.flow.setWordWrap(True);right.addWidget(self.flow)
+        right.addSpacing(10);self.flow=Q.QLabel('无需录入商品库：识别或点选物品 → 规划预览 → 确认抓取');self.flow.setWordWrap(True);right.addWidget(self.flow)
         self.plan=Q.QPushButton('规划预览');self.plan.clicked.connect(lambda:self.send('plan',id=self.selected_id()));actions.addWidget(self.plan)
         from .auto_grasp import AutoExecutionGate
         self.auto_grasp_gate=AutoExecutionGate()
@@ -287,10 +300,14 @@ class Window(DemoNavigation,Q.QWidget):
         left.insertLayout(0,view_row,1)
         from .action_studio import ActionStudio
         from .task_flow_ui import Workflow
-        self.studio=ActionStudio(self);self.module_tabs.addTab(self.studio,'固定动作编排')
+        self.studio=ActionStudio(self);self.module_tabs.addTab(self.studio,'遥操动作编排器')
+        from .pose_workspace import PoseWorkspace
+        self.pose_workspace=PoseWorkspace(self);self.module_tabs.addTab(self.pose_workspace,'姿态与动作')
         self.workflow=Workflow(self);self._module_index=0
         from .auto_task_ui import AutomaticTaskPage
         self.automatic=AutomaticTaskPage(self);self.module_tabs.addTab(self.automatic,'自动任务')
+        self.capability_note=Q.QLabel('视觉模型加载中；预录制动作和航点导航不依赖 CUDA。')
+        self.capability_note.setWordWrap(True);shell.addWidget(self.capability_note)
         self.module_tabs.currentChanged.connect(self.change_module)
         self.flow_button.clicked.connect(self.edit_flow)
         self.global_stop=Q.QPushButton('停止全部任务 / 动作');self.global_stop.setObjectName('stop')
@@ -319,9 +336,16 @@ class Window(DemoNavigation,Q.QWidget):
         try:
             if self.automatic.active or self.busy or self.motion or self.demo_active or self.placement_active or self.workflow.active or self.navigation.inflight:
                 raise ValueError('当前操作未结束，请先停止或等待完成')
-            if index==1:
+            if self.module_tabs.widget(index) is not self.pose_workspace and getattr(self.studio.engine,'manual_session',False):
+                self.studio.release()
+            if self.module_tabs.widget(index) in (self.studio,self.pose_workspace):
+                if self.studio.engine.moving():raise ValueError('当前动作尚未结束，请先停止或等待完成')
                 self.invalidate_plan();self.studio.ensure();self.studio.panel.setEnabled(True)
+                if self.module_tabs.widget(index) is self.pose_workspace:self.pose_workspace.ensure()
             else:self.studio.release()
+            if self.module_tabs.widget(index) is not self.pose_workspace:
+                self.pose_workspace.end_preview();self.pose_workspace.cancel_ik()
+            self.global_stop.setVisible(self.module_tabs.widget(index) is not self.pose_workspace)
             self._module_index=index
         except Exception as exc:
             self.module_tabs.blockSignals(True);self.module_tabs.setCurrentIndex(self._module_index);self.module_tabs.blockSignals(False)
@@ -356,6 +380,15 @@ class Window(DemoNavigation,Q.QWidget):
         try:atomic_json(self.root/'data/grip_settings.json',{'tightening_mm':float(value)})
         except OSError as exc:self.status.setText('收紧量本次有效，但保存失败：'+str(exc))
 
+    def grasp_speed_changed(self,value):
+        self.grasp_speed_value.setText(f'{value}%')
+        self.invalidate_plan();self.path_revision=None;self.video.path=[];self.video.update()
+        try:
+            atomic_json(self.root/'data/grasp_speed.json',{'percent':int(value)})
+            self.status.setText(f'抓取运动速度 {value}%，请重新规划；预览与真机将使用同一速度。')
+        except OSError as exc:self.status.setText('速度本次有效，但保存失败：'+str(exc))
+        self.controls()
+
     def edit_demo_settings(self):
         if self.demo_active or self.motion or self.busy:return
         from .demo_ui import edit_settings
@@ -372,7 +405,7 @@ class Window(DemoNavigation,Q.QWidget):
         self.status.setText('底盘位置已调整，请重新识别物品并规划。');self.controls()
 
     def controls(self):
-        idle=self.ready and not self.busy and self.motion is None and not self.demo_active and not self.placement_active
+        idle=not self.busy and self.motion is None and not self.demo_active and not self.placement_active
         if hasattr(self,'workflow'):
             idle=idle and not self.workflow.active and not self.workflow.base.moving() and self.module_tabs.currentIndex()==0 and not self.automatic_active()
             self.flow_button.setEnabled(idle)
@@ -393,14 +426,16 @@ class Window(DemoNavigation,Q.QWidget):
                     and plan.get('target',{}).get('instance_id')==self.selected_id()
                     and not self.blockers and not plan.get('blockers'))
         if hasattr(self,'navigation'):idle=idle and not self.navigation.inflight
-        self.demo.setEnabled(idle);self.demo_settings.setEnabled(idle)
+        self.demo.setEnabled(idle and self.ready);self.demo_settings.setEnabled(idle and self.ready)
         self.live_button.setEnabled(idle)
         if hasattr(self,'navigation'):self.navigation.controls(idle)
         self.chassis_button.setEnabled(idle and self.chassis_dialog is None)
-        self.scan.setEnabled(idle);self.list.setEnabled(idle)
+        idle=idle and self.ready
+        self.scan.setEnabled(idle);self.point_select.setEnabled(idle);self.list.setEnabled(idle)
         self.mode.setEnabled(idle);self.manage.setEnabled(idle)
         self.semantic.setEnabled(idle);self.semantic_apply.setEnabled(idle)
         self.grip_margin.setEnabled(idle)
+        self.grasp_speed.setEnabled(idle)
         self.target_offsets.setEnabled(idle)
         if self.catalog_dialog:
             for b in self.catalog_dialog.buttons:b.setEnabled(idle and bool(self.catalog_dialog.current()))
@@ -411,13 +446,26 @@ class Window(DemoNavigation,Q.QWidget):
         item=next((v for v in self.items if v['id']==self.selected_id()),{})
         self.rim.setVisible(item.get('geometry')=='bag_edge')
         self.rim.setEnabled(idle and self.frozen and item.get('geometry')=='bag_edge')
+        if hasattr(self,'workflow') and not self.workflow.active and not self.demo.isChecked():
+            # 真机入口取决于有效计划，不取决于手眼标定文件名是否非空。
+            # URDF模式及未录入物品与已录入商品使用同一确认链路。
+            pending=self.pending_plan or {}
+            self.execute.setEnabled(idle and not self.cancel_pending and bool(pending.get('plan_id'))
+                and pending.get('target',{}).get('instance_id')==self.selected_id()
+                and not self.blockers and not pending.get('blockers'))
         if self.demo.isChecked():
             self.execute.setText('确认演示抓取');self.execute.setEnabled(idle)
 
     def send(self,action,**values):
+        if not self.ready:
+            self.status.setText('视觉功能不可用：'+self.vision_error+'；预录制动作和航点导航仍可使用。')
+            return
         if not self.process:return
+        if action not in ('point_prepare','segment_point'):self._point_pick=False
+        if action=='point_prepare':self._point_pick=True;self.picking_rim=False
         if action=='plan':
             values['grip_tightening_mm']=self.grip_margin.value()
+            values['grasp_speed_percent']=self.grasp_speed.value()
             try:values['target_offsets_by_arm_torso_mm']=self.target_offsets.profiles()
             except ValueError as exc:self.status.setText(str(exc));return
         self.invalidate_plan()
@@ -432,15 +480,22 @@ class Window(DemoNavigation,Q.QWidget):
             self.auto_grasp_gate.arm(self.request,self.grasp_context(),
                 self.automatic_grasp_enabled() and not self.demo.isChecked() and not self.demo_active)
         self.process.write((json.dumps({'action':action,'request_id':self.request,**values},ensure_ascii=False)+'\n').encode())
-        self.status.setText({'scan':'正在识别物品…','scan_task':'正在按任务物品识别并分割…','set_prompt':'按文字定位并分割物品…','plan':'正在定位和规划…','enroll':'保存商品样本…','prepare':'检查原VR复位路径…','remove_product':'正在删除商品…'}.get(action,'处理中…'))
+        self.status.setText({'point_prepare':'正在获取点选画面…','segment_point':'正在分割所点物体并生成建议名称…','scan':'正在识别物品…','scan_task':'正在按任务物品识别并分割…','set_prompt':'按文字定位并分割物品…','plan':'正在定位和规划…','enroll':'保存商品样本…','prepare':'检查保存的全身复位姿态与路径…','remove_product':'正在删除商品…'}.get(action,'处理中…'))
         self.controls()
 
     def prepare_robot(self):
         if self.busy or self.motion:return
-        if Q.QMessageBox.question(self,'复位到原VR准备位姿',
-            '保持当前位置使能，再直接到原VR准备位姿并张开双夹爪；腰腿保持不动。\n'
-            '请清空夹爪及机械臂运动范围，并准备好实体急停。',
-            defaultButton=Q.QMessageBox.No)==Q.QMessageBox.Yes:self.send('prepare')
+        from .workspace_reset import reset_path
+        if not reset_path(self.root).exists():
+            self.status.setText('请先进入“姿态与动作”，调好实机姿态后点击“将当前姿态设为复位姿态”。');return
+        from .pose_execution_profile import read_speed
+        summary='恢复“姿态与动作”中保存的全身姿态，包含腰腿高度；关节到位后恢复左右夹爪开度。\n'
+        if Q.QMessageBox.question(self,'复位并准备',summary+
+            f'姿态 / 复位共用速度：{read_speed(self.root):g}%。\n'
+            '若头部失能后低垂贴身，将先以约1°/秒抬到15°，复核无碰撞后再复位双臂。\n'
+            '请清空双爪与运动范围；低垂时需现场支撑头部、确认线缆无夹压，并有人看护急停。',
+            defaultButton=Q.QMessageBox.No)==Q.QMessageBox.Yes:
+            self.send('prepare',operator_supported_neck_recovery=True)
 
     def change_mode(self):
         if not self.ready:return
@@ -473,17 +528,29 @@ class Window(DemoNavigation,Q.QWidget):
         if self.automatic.defer_worker_event(data):return
         if kind=='status':self.status.setText(data['text']);return
         self.busy=False
+        if kind=='error':self._point_pick=False
         if 'mode' in data:
             self.mode.blockSignals(True);self.mode.setCurrentIndex(max(0,self.mode.findData(data['mode'])));self.mode.blockSignals(False)
         if 'semantic_prompt' in data:self.semantic.setText(data['semantic_prompt'])
         if 'semantic_prompt_resolved' in data:
             self.semantic.setToolTip('实际识别描述：'+data['semantic_prompt_resolved']+'\n只输入名称即可；颜色是可选筛选条件，品牌由商品库匹配。')
         if kind=='ready':
-            self.ready=True;self.blockers=data['blockers'];self.status.setText('识别已就绪，可直接识别，或输入物品描述。')
+            self.ready=True;self.vision_error='';self.capability_note.setText('视觉已就绪 · 支持识别抓取、预录制动作与航点导航');self.blockers=data['blockers'];self.status.setText('识别已就绪，可直接识别，或输入物品描述。')
             self.execute.setToolTip('；'.join(self.blockers))
+            if data.get('calibration'):self.capability_note.setText('视觉已就绪 · '+data['calibration'])
+        elif kind=='vision_unavailable':
+            self.ready=False;self.vision_error=data['text'];self.invalidate_plan()
+            self.status.setText(data['text'])
+            self.capability_note.setText('任务编排可用：预录制动作、航点导航、底盘定量。视觉抓取/放置暂不可用：'+self.vision_error)
+        elif kind=='point_ready':
+            self._point_pick=True;self._point_token=data['token'];self.items=[];self.list.clear()
+            self.video.shape=data['shape'];self.video.pix=G.QPixmap(str(self.run/'point_scene.png'))
+            self.video.boxes=[];self.video.path=[];self.video.notice='';self.video.update();self.frozen=False
+            self.view_text.setText('点选画面已定格 · 点击物体中心 · 点击“实时画面”取消')
+            self.status.setText('请在图像中点击要抓取的物体，避开背景；无需输入名称。')
         elif kind=='reset_planned':
             self.live();self.items=[];self.list.clear()
-            self.status.setText('保持式使能，复位到原VR位姿并张开双爪…')
+            self.status.setText('保持式使能，按已检查顺序恢复准备姿态…')
             if data['blockers']:
                 self.status.setText('；'.join(data['blockers']))
                 if self.demo_active:self.demo_failure('；'.join(data['blockers']))
@@ -515,11 +582,14 @@ class Window(DemoNavigation,Q.QWidget):
                 text=f'#{v["id"]}  {v["name"]}\n'+(f'宽 {dims[0]:g} · 高 {dims[1]:g} mm' if dims else '可直接规划 · 自动估计尺寸')
                 item=Q.QListWidgetItem(text);item.setData(C.Qt.UserRole,v['id']);self.list.addItem(item)
             if kind=='scene':
+                self._point_pick=False
                 self.video.shape=data['shape'];self.video.pix=G.QPixmap(str(self.run/'scene.jpg'))
                 self.frozen=True;self.video.boxes=self.items;self.view_text.setText('实时 RGB · 分割标注跟踪 · 规划前重新识别')
                 self.status.setText(f'找到 {len(self.items)} 个候选 · 识别 {data["elapsed_ms"]:.0f} ms')
                 if data.get('semantic_prompt') and data.get('semantic_prompt_resolved'):
                     self.status.setText(self.status.text()+'\n'+data['semantic_prompt_resolved'].rstrip('.'))
+                if data.get('point_selection') and self.items:
+                    self.status.setText('已分割所点物体 · '+self.items[0]['name']+'\n建议名称可在“录入”中修改；规划前会重新核对目标。')
             else:self.video.boxes=self.items;self.status.setText(data.get('text','商品库已同步，修改后请重新规划'))
             if self.items:
                 keep=data.get('select_id',previous_id if kind!='scene' else None)
@@ -551,18 +621,20 @@ class Window(DemoNavigation,Q.QWidget):
             hand='右手' if data.get('arm')=='right' else '左手'
             provisional=bool(data.get('tool_geometry',{}).get('provisional'))
             test_calibration=bool(data.get('tool_geometry',{}).get('calibration_profile',{}).get('test_only'))
-            self.badge.setText('306 · '+hand+(' · 测试标定（待验证）' if test_calibration else (' · TCP临时估计' if provisional else ' · 标定TCP')))
+            self.badge.setText(hand+(' · 本机URDF名义坐标' if data.get('tool_geometry',{}).get('method')=='urdf_nominal_tcp' else ' · 测试标定（待验证）' if test_calibration else (' · TCP临时估计' if provisional else ' · 标定TCP')))
             self.status.setText(hand+'抓取 · '+self.status.text())
             if data.get('grasp_contact_mode')=='front_local':
                 self.status.setText(self.status.text()+' · 前端局部夹取（非物体中心）')
             if data.get('partial_view'):
-                self.status.setText(self.status.text()+' · 按可见部分夹取（底部未确认，不能自动放置）')
+                note=('瓶底已观测，可继续放置' if data.get('placement_bottom_observed') else '底部未确认，暂不能自动放置')
+                self.status.setText(self.status.text()+' · 按可见瓶身夹取（'+note+'）')
             if data.get('estimated_dimensions_mm'):
                 w,h,d=data['estimated_dimensions_mm']
                 self.status.setText(self.status.text()+f'\n估计宽×高×厚：{w:.0f}×{h:.0f}×{d:.0f} mm（未保存商品库）')
             self.view_text.setText('路径预览 · 1预抓取  2抓取  3连续起瓶并收回' if data.get('carry_protocol_version')==2
                                   else '路径预览 · 1预抓取  2抓取  3抬起  4退离'+('  5固定持物' if data.get('carry_protocol_version') else ''))
-            self.blockers=data['blockers'];self.execute.setToolTip('；'.join(self.blockers));self.execute.setEnabled(not self.blockers)
+            self.blockers=data['blockers'];self.execute.setToolTip('；'.join(self.blockers))
+            if data.get('calibration'):self.capability_note.setText('视觉已就绪 · '+data['calibration'])
             self.execute.setText('确认抓取 · '+target['name'])
             if self.blockers:self.status.setText(target['name']+'路径已预览；'+'；'.join(self.blockers))
             self.footer.setText('仅预览 · '+('；'.join(self.blockers[1:3]) if self.blockers else '请确认操作空间清空'))
@@ -572,7 +644,9 @@ class Window(DemoNavigation,Q.QWidget):
             self.demo_active=False;self.placement_active=False;self.demo_phase=None
             self.invalidate_plan();self.status.setText(data['text'])
             if self.catalog_dialog and self.catalog_dialog.isVisible():self.catalog_dialog.info.setText(data['text'])
-            if kind=='fatal':self.ready=False
+            if kind=='fatal':
+                self.ready=False;self.vision_error=data['text']
+                self.capability_note.setText('视觉后台不可用；预录制动作和航点导航仍可使用。原因：'+self.vision_error)
             if self.automatic.active and self.automatic.phase=='preparing':self.stop_motion(reason=data['text'],source='automatic_task')
         self.video.update();self.controls()
         self.workflow.worker_event(data)
@@ -587,7 +661,7 @@ class Window(DemoNavigation,Q.QWidget):
         return self.auto_grasp.isChecked() or (self.automatic_active() and self.workflow.active)
 
     def grasp_page_allowed(self):
-        return self.module_tabs.currentIndex()==0 or (self.module_tabs.currentIndex()==2 and self.automatic_active())
+        return self.module_tabs.currentWidget() is self.grasp_page or (self.module_tabs.currentWidget() is self.automatic and self.automatic_active())
 
     def grasp_context(self):
         return self.workflow.cursor.token if self.workflow.active else None
@@ -624,12 +698,15 @@ class Window(DemoNavigation,Q.QWidget):
         self.status.setText('点击袋口的实体边缘（避开细提绳）')
 
     def live(self):
+        self._point_pick=False;self._point_token=None
         self.invalidate_plan();self.picking_rim=False
         self.overlay_revision=None;self.path_revision=None;self.video.notice=''
         self.frozen=False;self.video.boxes=[];self.video.path=[];self.execute.setEnabled(False);self.view_text.setText('实时 RGB');self.preview_stamp=0
 
     def image_clicked(self,x,y):
         if self.busy or self.motion:return
+        if self._point_pick:
+            self.send('segment_point',token=self._point_token,x=x,y=y);return
         if self.picking_rim:
             shown=next((v for v in self.video.boxes if v['id']==self.selected_id()),None)
             if shown is None:self.status.setText('目标标注已丢失，请重新识别后选取袋口');return
@@ -654,6 +731,7 @@ class Window(DemoNavigation,Q.QWidget):
         item=next((v for v in self.items if v['id']==self.selected_id()),{})
         product=product or next((p for p in catalog if p['id']==item.get('product_id')),None)
         dialog=ProductEditor(self,product,catalog,'beverage' if self.mode.currentData()=='beverages' else 'general',edit_only)
+        if not product and item.get('suggested_name'):dialog.name.setEditText(item['suggested_name'])
         if dialog.exec_()==Q.QDialog.Accepted:
             if edit_only:self.send('update_product',product_id=product['id'],values=dialog.values())
             else:self.send('enroll',id=self.selected_id(),**dialog.values())
@@ -687,18 +765,20 @@ class Window(DemoNavigation,Q.QWidget):
         data=self.pending_plan
         if not data or data['target']['instance_id']!=self.selected_id():
             self.invalidate_plan();self.status.setText('请为当前选中的饮料重新规划。');return
-        try:
-            receipt=json.loads((self.run/'prepare_result.json').read_text('utf-8'))
-            if receipt.get('status')!='prepared' or not data.get('prepare_token') or receipt.get('token')!=data['prepare_token']:
-                raise ValueError('本轮复位尚未完成，请先复位并准备')
-        except (ValueError,OSError) as exc:
-            self.invalidate_plan();self.status.setText('不能开始抓取：'+str(exc));return
+        if data.get('requires_reset',True):
+            try:
+                receipt=json.loads((self.run/'prepare_result.json').read_text('utf-8'))
+                if receipt.get('status')!='prepared' or not data.get('prepare_token') or receipt.get('token')!=data['prepare_token']:
+                    raise ValueError('本轮复位尚未完成，请先复位并准备')
+            except (ValueError,OSError) as exc:
+                self.invalidate_plan();self.status.setText('不能开始抓取：'+str(exc));return
         estimated=data.get('estimated_dimensions_mm')
         notice=(f'本次自动估计宽×高×厚：{estimated[0]:.0f}×{estimated[1]:.0f}×{estimated[2]:.0f} mm，请确认尺寸与实物相符。\n' if estimated else '')
         if data.get('grasp_contact_mode')=='front_local':notice+='本次夹取较窄前端，非物体中心；偏心夹取的夹持稳定性尚未实测。\n'
         from .target_offsets import description
-        notice+='本次'+('左手' if data.get('arm','left')=='left' else '右手')+'位置补偿：'+description(data.get('config',{}).get('target_offset_torso_mm',[0,0,0]))+'。\n'
-        if not automatic and Q.QMessageBox.question(self,'确认抓取：'+data['target']['name'],notice+'使用当前手眼标定及独立TCP修正；实物精度尚未验收。\n抓取段不检查桌面、货架及邻物，请确认预览路径空旷。\n闭爪稳定后自动抬起并收回；尚无夹稳检测。\n人员离开运动范围并准备实体急停，开始？',defaultButton=Q.QMessageBox.No)!=Q.QMessageBox.Yes:return
+        notice+='本次'+('左手' if data.get('arm','left')=='left' else '右手')+'位置补偿：'+description(data.get('target_offset_torso_mm',data.get('config',{}).get('target_offset_torso_mm',[0,0,0])))+'。\n'
+        if not data.get('requires_reset',True):notice+='从当前姿态开始，所选夹爪先张开；不执行全身复位。\n'
+        if not automatic and Q.QMessageBox.question(self,'确认抓取：'+data['target']['name'],notice+'使用当前配置的相机/夹爪几何及左右手补偿；URDF为名义安装关系。\n抓取段不检查桌面、货架及邻物，请确认预览路径空旷。\n闭爪稳定后自动抬起并收回；尚无夹稳检测。\n人员离开运动范围并准备实体急停，开始？',defaultButton=Q.QMessageBox.No)!=Q.QMessageBox.Yes:return
         if self.motion or self.cancel_pending or self.busy or self.pending_plan is not data or data['target']['instance_id']!=self.selected_id():return
         self.auto_grasp_gate.revoke()
         if self.workflow.active:self.workflow.phase='grasp'
@@ -823,6 +903,7 @@ class Window(DemoNavigation,Q.QWidget):
 
     def tick(self):
         (self.run/'heartbeat').touch()
+        if self._point_pick:return
         packet=self.run/'preview.npz'
         if packet.exists():
             try:
@@ -852,9 +933,15 @@ class Window(DemoNavigation,Q.QWidget):
                 self.video.pix=G.QPixmap(str(path));self.preview_stamp=stamp;self.video.update()
 
     def finished(self,*_):
-        if self.demo_active or self.placement_active or self.workflow.active or self.automatic_active():
+        from .task_capabilities import uses_perception
+        visual_flow=self.workflow.active and uses_perception(self.workflow.cursor.record)
+        visual_auto=self.automatic_active() and uses_perception(self.automatic.record)
+        if self.demo_active or self.placement_active or visual_flow or visual_auto:
             self.stop_motion(reason='识别后台已退出',source='worker_exit')
-        self.ready=False;self.busy=False;self.controls()
+        self.ready=False;self.busy=False
+        self.vision_error=self.vision_error or '识别后台已退出，请重新打开程序恢复视觉功能'
+        self.capability_note.setText('预录制动作和航点导航可用；视觉不可用：'+self.vision_error)
+        self.controls()
 
     def closeEvent(self,event):
         if self.demo_active or self.placement_active or self.workflow.active or self.automatic_active():
@@ -873,7 +960,7 @@ class Window(DemoNavigation,Q.QWidget):
             self.process.write(b'{"action":"quit"}\n');self.process.closeWriteChannel()
             if not self.process.waitForFinished(2000):self.process.terminate();self.process.waitForFinished(1000)
             if self.process.state()!=C.QProcess.NotRunning:self.process.kill();self.process.waitForFinished(1000)
-        self.automatic.shutdown();self.studio.shutdown();event.accept()
+        self.pose_workspace.shutdown();self.automatic.shutdown();self.studio.shutdown();event.accept()
 
 
 def main():

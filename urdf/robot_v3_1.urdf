@@ -1,0 +1,2206 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="robot_v3_1">
+  <link
+    name="Link_Zero_Point">
+    <inertial>
+      <origin
+        xyz="-0.00077 -0.00335 0.12585"
+        rpy="0 0 0" />
+      <mass
+        value="26.388" />
+      <inertia
+        ixx="0.60993"
+        ixy="0.00887"
+        ixz="0.01784"
+        iyy="0.98428"
+        iyz="-0.01082"
+        izz="1.3095" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Zero_Point.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Zero_Point.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_IMU"
+    type="fixed">
+    <origin
+      xyz="-0.002 0.0002 0.1883"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Zero_Point" />
+    <child
+      link="Link_IMU" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="Link_Ankle_to_Knee">
+    <inertial>
+      <origin
+        xyz="0.00028 0.00641 0.16683"
+        rpy="0 0 0" />
+      <mass
+        value="14.5" />
+      <inertia
+        ixx="0.33822"
+        ixy="0.00012"
+        ixz="-0.00014"
+        iyy="0.31898"
+        iyz="0.00292"
+        izz="0.07654" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Ankle_to_Knee.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Ankle_to_Knee.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Ankle"
+    type="revolute">
+    <origin
+      xyz="0 0 0.28"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Zero_Point" />
+    <child
+      link="Link_Ankle_to_Knee" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-1.4835"
+      upper="1.4835"
+      effort="376"
+      velocity="1.8849" />
+  </joint>
+  <link
+    name="Link_Knee_to_Waist_Pitch">
+    <inertial>
+      <origin
+        xyz="-0.00487 0.00034207 0.18429"
+        rpy="0 0 0" />
+      <mass
+        value="2.8" />
+      <inertia
+        ixx="0.07795"
+        ixy="1E-05"
+        ixz="0.00065"
+        iyy="0.05124"
+        iyz="-0.00048"
+        izz="0.03292" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Knee_to_Waist_Pitch.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Knee_to_Waist_Pitch.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Knee"
+    type="revolute">
+    <origin
+      xyz="0 0 0.3395"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Ankle_to_Knee" />
+    <child
+      link="Link_Knee_to_Waist_Pitch" />
+    <axis
+      xyz="0 -1 0" />
+    <limit
+      lower="-2.71"
+      upper="2.71"
+      effort="376"
+      velocity="1.8849" />
+  </joint>
+  <link
+    name="Link_Waist_Pitch_to_Waist_Yaw">
+    <inertial>
+      <origin
+        xyz="-0.00024489 0.0025502 0.0084192"
+        rpy="0 0 0" />
+      <mass
+        value="4.7" />
+      <inertia
+        ixx="0.02397"
+        ixy="0"
+        ixz="5E-05"
+        iyy="0.02152"
+        iyz="-4E-05"
+        izz="0.0248" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Waist_Pitch_to_Waist_Yaw.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Waist_Pitch_to_Waist_Yaw.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Waist_Pitch"
+    type="revolute">
+    <origin
+      xyz="0 0 0.3675"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Knee_to_Waist_Pitch" />
+    <child
+      link="Link_Waist_Pitch_to_Waist_Yaw" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-1.71042"
+      upper="2.18166"
+      effort="182"
+      velocity="1.8849" />
+  </joint>
+  <link
+    name="Link_Waist_Yaw_to_Shoulder_Inner">
+    <inertial>
+      <origin
+        xyz="0.0024836 3.9663E-05 0.18538"
+        rpy="0 0 0" />
+      <mass
+        value="6.717" />
+      <inertia
+        ixx="0.13661"
+        ixy="8E-05"
+        ixz="0.00205"
+        iyy="0.11529"
+        iyz="-9E-05"
+        izz="0.08568" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Waist_Yaw_to_Shoulder_Inner.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Waist_Yaw_to_Shoulder_Inner.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Waist_Yaw"
+    type="revolute">
+    <origin
+      xyz="0 0 0.06893"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Waist_Pitch_to_Waist_Yaw" />
+    <child
+      link="Link_Waist_Yaw_to_Shoulder_Inner" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-3.14"
+      upper="3.14"
+      effort="182"
+      velocity="1.8849" />
+  </joint>
+  <link
+    name="Link_Neck_Roll_to_Neck_Pitch">
+    <inertial>
+      <origin
+        xyz="0.029508 -0.01351 -2.2524E-07"
+        rpy="0 0 0" />
+      <mass
+        value="0.0341" />
+      <inertia
+        ixx="3.7509E-06"
+        ixy="-1.0943E-06"
+        ixz="-1.8114E-10"
+        iyy="1.2477E-05"
+        iyz="5.7028E-11"
+        izz="1.2489E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Neck_Roll_to_Neck_Pitch.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Neck_Roll_to_Neck_Pitch.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Neck_Roll"
+    type="revolute">
+    <origin
+      xyz="-0.045134 -0.00013407 0.3856"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Waist_Yaw_to_Shoulder_Inner" />
+    <child
+      link="Link_Neck_Roll_to_Neck_Pitch" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-0.349"
+      upper="0.349"
+      effort="7"
+      velocity="20.94" />
+  </joint>
+  <link
+    name="Link_Neck_Pitch_to_Neck_Yaw">
+    <inertial>
+      <origin
+        xyz="0.015324 -1.2558E-06 0.053436"
+        rpy="0 0 0" />
+      <mass
+        value="0.4478" />
+      <inertia
+        ixx="0.0001"
+        ixy="0"
+        ixz="-2E-05"
+        iyy="0.00021"
+        iyz="0"
+        izz="0.0003" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Neck_Pitch_to_Neck_Yaw.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Neck_Pitch_to_Neck_Yaw.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Neck_Pitch"
+    type="revolute">
+    <origin
+      xyz="0.0362 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Neck_Roll_to_Neck_Pitch" />
+    <child
+      link="Link_Neck_Pitch_to_Neck_Yaw" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-0.5236"
+      upper="0.7854"
+      effort="7"
+      velocity="20.94" />
+  </joint>
+  <link
+    name="Link_Neck_Yaw_to_Head">
+    <inertial>
+      <origin
+        xyz="0.00499 -0.00015 0.02336"
+        rpy="0 0 0" />
+      <mass
+        value="0.9545" />
+      <inertia
+        ixx="0.00499"
+        ixy="0"
+        ixz="-0.00043"
+        iyy="0.00564"
+        iyz="3E-05"
+        izz="0.00288" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Neck_Yaw_to_Head.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Neck_Yaw_to_Head.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Neck_Yaw"
+    type="revolute">
+    <origin
+      xyz="0 0 0.0535"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Neck_Pitch_to_Neck_Yaw" />
+    <child
+      link="Link_Neck_Yaw_to_Head" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.05"
+      upper="1.05"
+      effort="7"
+      velocity="20.94" />
+  </joint>
+  <link
+    name="Link_Camera_Head_Back">
+    <inertial>
+      <origin
+        xyz="-0.0137628709615853 1.12790005801712E-06 0.000212267959592394"
+        rpy="0 0 0" />
+      <mass
+        value="0.00611900501009983" />
+      <inertia
+        ixx="6.62775081552283E-07"
+        ixy="4.31840157837241E-12"
+        ixz="-1.33425552659388E-08"
+        iyy="6.09806747305867E-07"
+        iyz="1.34174561077416E-12"
+        izz="5.91858009327135E-07" />
+    </inertial>
+  </link>
+  <joint
+    name="Joint_Camera_Head_Back"
+    type="fixed">
+    <origin
+      xyz="-0.091102 -0.00078938 0.081006"
+      rpy="0 0 -3.1416" />
+    <parent
+      link="Link_Neck_Yaw_to_Head" />
+    <child
+      link="Link_Camera_Head_Back" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="Link_Camera_Head_Left_Eye">
+    <inertial>
+      <origin
+        xyz="-0.0137628920010442 1.88307359736545E-07 -0.000212277211881329"
+        rpy="0 0 0" />
+      <mass
+        value="0.0061189937572636" />
+      <inertia
+        ixx="6.6277476950023E-07"
+        ixy="-1.32719920232759E-11"
+        ixz="1.33418291785817E-08"
+        iyy="6.09805242172089E-07"
+        iyz="-1.70113860464291E-11"
+        izz="5.91856170738299E-07" />
+    </inertial>
+  </link>
+  <joint
+    name="Joint_Camera_Head_Left_Eye"
+    type="fixed">
+    <origin
+      xyz="0.084417 0.030635 0.070318"
+      rpy="-0.00094015 0.087266 -8.194E-05" />
+    <parent
+      link="Link_Neck_Yaw_to_Head" />
+    <child
+      link="Link_Camera_Head_Left_Eye" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="Link_Camera_Head_Right_Eye">
+    <inertial>
+      <origin
+        xyz="-0.0074529946051001 5.99430533876344E-07 0.000438964379455342"
+        rpy="0 0 0" />
+      <mass
+        value="0.00611899375726351" />
+      <inertia
+        ixx="6.59919277261713E-07"
+        ixy="3.36856738622477E-12"
+        ixz="1.92965873433972E-08"
+        iyy="6.09805258509282E-07"
+        iyz="-1.65363650678352E-12"
+        izz="5.94711646639601E-07" />
+    </inertial>
+  </link>
+  <joint
+    name="Joint_Camera_Head_Right_Eye"
+    type="fixed">
+    <origin
+      xyz="0.078136 -0.032352 0.070868"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Neck_Yaw_to_Head" />
+    <child
+      link="Link_Camera_Head_Right_Eye" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="Link_Camera_Head_Forehead">
+    <inertial>
+      <origin
+        xyz="-0.0125213281010078 0.00111309233572208 -2.75875496473788E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.0456884127289588" />
+      <inertia
+        ixx="2.7547648937903E-05"
+        ixy="-4.09721539132937E-07"
+        ixz="-7.53350501330374E-09"
+        iyy="4.13555324257906E-06"
+        iyz="6.6386414298814E-09"
+        izz="2.78336401833524E-05" />
+    </inertial>
+  </link>
+  <joint
+    name="Joint_Camera_Head_Forehead"
+    type="fixed">
+    <origin
+      xyz="0.082982 -0.00085865 0.10528"
+      rpy="-0.00021874 0.38397 -8.1941E-05" />
+    <parent
+      link="Link_Neck_Yaw_to_Head" />
+    <child
+      link="Link_Camera_Head_Forehead" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="Link_Left_Shoulder_Inner_to_Shoulder_Outer">
+    <inertial>
+      <origin
+        xyz="0.00038 -0.02188 1E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.3416" />
+      <inertia
+        ixx="0.00094"
+        ixy="-2E-05"
+        ixz="0"
+        iyy="0.00054"
+        iyz="0"
+        izz="0.00101" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Shoulder_Inner_to_Shoulder_Outer.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Shoulder_Inner_to_Shoulder_Outer.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Left_Shoulder_Inner"
+    type="revolute">
+    <origin
+      xyz="0 0.15195 0.27495"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Waist_Yaw_to_Shoulder_Inner" />
+    <child
+      link="Link_Left_Shoulder_Inner_to_Shoulder_Outer" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-2.932"
+      upper="2.932"
+      effort="97"
+      velocity="6.2831" />
+  </joint>
+  <link
+    name="Link_Left_Shoulder_Outer_to_UpperArm">
+    <inertial>
+      <origin
+        xyz="-0.00069 0.00544 -0.05025"
+        rpy="0 0 0" />
+      <mass
+        value="2.259" />
+      <inertia
+        ixx="0.00968"
+        ixy="1E-05"
+        ixz="-7E-05"
+        iyy="0.00914"
+        iyz="0.00067"
+        izz="0.00234" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Shoulder_Outer_to_UpperArm.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Shoulder_Outer_to_UpperArm.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Left_Shoulder_Outer"
+    type="revolute">
+    <origin
+      xyz="0 0.064755 0"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Left_Shoulder_Inner_to_Shoulder_Outer" />
+    <child
+      link="Link_Left_Shoulder_Outer_to_UpperArm" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-0.19198621771937624"
+      upper="3.14"
+      effort="97"
+      velocity="6.2831" />
+  </joint>
+  <link
+    name="Link_Left_UpperArm_to_Elbow">
+    <inertial>
+      <origin
+        xyz="0.01543 -0.00288 -0.10425"
+        rpy="0 0 0" />
+      <mass
+        value="1.1071" />
+      <inertia
+        ixx="0.00208"
+        ixy="4E-05"
+        ixz="0.00041"
+        iyy="0.00236"
+        iyz="-7E-05"
+        izz="0.0012" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_UpperArm_to_Elbow.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_UpperArm_to_Elbow.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Left_UpperArm"
+    type="revolute">
+    <origin
+      xyz="0 0.011003 -0.1635"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Left_Shoulder_Outer_to_UpperArm" />
+    <child
+      link="Link_Left_UpperArm_to_Elbow" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-2.9147"
+      upper="2.9147"
+      effort="97"
+      velocity="6.2831" />
+  </joint>
+  <link
+    name="Link_Left_Elbow_to_Forearm">
+    <inertial>
+      <origin
+        xyz="-0.022696 0.00067768 -0.044929"
+        rpy="0 0 0" />
+      <mass
+        value="0.7046" />
+      <inertia
+        ixx="0.0021"
+        ixy="-2E-05"
+        ixz="-0.00016"
+        iyy="0.00204"
+        iyz="-3E-05"
+        izz="0.00145" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Elbow_to_Forearm.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Elbow_to_Forearm.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Left_Elbow"
+    type="revolute">
+    <origin
+      xyz="0.025 1.8529E-05 -0.1241"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Left_UpperArm_to_Elbow" />
+    <child
+      link="Link_Left_Elbow_to_Forearm" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-2.618"
+      upper="0"
+      effort="97"
+      velocity="6.2831" />
+  </joint>
+  <link
+    name="Link_Left_Forearm_to_Wrist_Upper">
+    <inertial>
+      <origin
+        xyz="-0.00098 -1E-05 -0.03309"
+        rpy="0 0 0" />
+      <mass
+        value="0.18" />
+      <inertia
+        ixx="0.00022"
+        ixy="0"
+        ixz="0"
+        iyy="0.00037"
+        iyz="0"
+        izz="0.00037" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Forearm_to_Wrist_Upper.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Forearm_to_Wrist_Upper.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Left_Forearm"
+    type="revolute">
+    <origin
+      xyz="-0.024896 0 -0.12202"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Left_Elbow_to_Forearm" />
+    <child
+      link="Link_Left_Forearm_to_Wrist_Upper" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-2.9496"
+      upper="2.9496"
+      effort="27"
+      velocity="5.236" />
+  </joint>
+  <link
+    name="Link_Left_Wrist_Upper_to_Wrist_Lower">
+    <inertial>
+      <origin
+        xyz="0.00127 0.00315 -0.02803"
+        rpy="0 0 0" />
+      <mass
+        value="0.9312" />
+      <inertia
+        ixx="0.00199"
+        ixy="-3E-05"
+        ixz="-1E-05"
+        iyy="0.00195"
+        iyz="3E-05"
+        izz="0.00126" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Wrist_Upper_to_Wrist_Lower.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Wrist_Upper_to_Wrist_Lower.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Left_Wrist_Upper"
+    type="revolute">
+    <origin
+      xyz="5.3093E-05 0 -0.062301"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Left_Forearm_to_Wrist_Upper" />
+    <child
+      link="Link_Left_Wrist_Upper_to_Wrist_Lower" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-1.3963"
+      upper="1.3963"
+      effort="27"
+      velocity="5.236" />
+  </joint>
+  <link
+    name="Link_Left_Wrist_Lower_to_Gripper">
+    <inertial>
+      <origin
+        xyz="0.00351 0.00231 -0.09433"
+        rpy="0 0 0" />
+      <mass
+        value="0.15" />
+      <inertia
+        ixx="0.00052"
+        ixy="0"
+        ixz="1E-05"
+        iyy="0.00043"
+        iyz="-3E-05"
+        izz="0.00021" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Wrist_Lower_to_Gripper.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Wrist_Lower_to_Gripper.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Left_Wrist_Lower"
+    type="revolute">
+    <origin
+      xyz="5.037E-05 0 -0.0592"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Left_Wrist_Upper_to_Wrist_Lower" />
+    <child
+      link="Link_Left_Wrist_Lower_to_Gripper" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-1.4486"
+      upper="1.4486"
+      effort="27"
+      velocity="5.236" />
+  </joint>
+  <link
+    name="Link_Left_FT_Sensor">
+    <inertial>
+      <origin
+        xyz="8.58881520172475E-05 0.000834507824790914 0.0100518482532368"
+        rpy="0 0 0" />
+      <mass
+        value="0.0139672021001477" />
+      <inertia
+        ixx="5.82205380105956E-06"
+        ixy="-1.69800199849347E-08"
+        ixz="9.61368371959046E-09"
+        iyy="6.24737937532908E-06"
+        iyz="5.72568657164329E-08"
+        izz="1.13884845179039E-05" />
+    </inertial>
+  </link>
+  <joint
+    name="Joint_Left_FT_Sensor"
+    type="fixed">
+    <origin
+      xyz="4.786E-05 0 -0.05625"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Left_Wrist_Lower_to_Gripper" />
+    <child
+      link="Link_Left_FT_Sensor" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="Link_Left_Gripper">
+    <inertial>
+      <origin
+        xyz="2.28158523246731E-05 1.51738588893835E-06 -0.0268153163417773"
+        rpy="0 0 0" />
+      <mass
+        value="0.00736037063010901" />
+      <inertia
+        ixx="9.46898564301729E-07"
+        ixy="-5.2640158659239E-07"
+        ixz="1.18493809393316E-09"
+        iyy="1.4889248995275E-06"
+        iyz="-3.97774729415336E-10"
+        izz="2.37455602021539E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Gripper.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Gripper.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Left_Gripper"
+    type="revolute">
+    <origin
+      xyz="0.0001124 0 -0.1321"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Left_Wrist_Lower_to_Gripper" />
+    <child
+      link="Link_Left_Gripper" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.4486"
+      upper="1.4486"
+      effort="7"
+      velocity="20.94" />
+  </joint>
+  <link
+    name="Link_Left_Gripper_Left_Knuckle">
+    <inertial>
+      <origin
+        xyz="0.0044587202554836 0.0171785037732355 0.00273034063002631"
+        rpy="0 0 0" />
+      <mass
+        value="0.00274859742256499" />
+      <inertia
+        ixx="5.09260789499428E-07"
+        ixy="1.21476379223159E-07"
+        ixz="-1.26909768224224E-09"
+        iyy="7.31332820508943E-08"
+        iyz="-4.95717443243008E-09"
+        izz="5.62580659157736E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Gripper_Left_Knuckle.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Gripper_Left_Knuckle.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Left_Gripper_Left_Knuckle"
+    type="revolute">
+    <origin
+      xyz="-0.026219 0.016014 -0.039521"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Left_Gripper" />
+    <child
+      link="Link_Left_Gripper_Left_Knuckle" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.4486"
+      upper="1.4486"
+      effort="7"
+      velocity="20.94" />
+  </joint>
+  <link
+    name="Link_Left_Gripper_Left_Finger">
+    <inertial>
+      <origin
+        xyz="0.0164461682479147 0.00121971776334706 0.00432180340551969"
+        rpy="0 0 0" />
+      <mass
+        value="0.00178950665854094" />
+      <inertia
+        ixx="7.67289874039957E-08"
+        ixy="4.12117072796004E-14"
+        ixz="4.03187609685423E-11"
+        iyy="5.86774350121152E-08"
+        iyz="3.67557190960103E-12"
+        izz="1.23631686463325E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Gripper_Left_Finger.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Gripper_Left_Finger.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Left_Gripper_Left_Finger"
+    type="revolute">
+    <origin
+      xyz="0.009803 0.037748 -0.00048952"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Left_Gripper_Left_Knuckle" />
+    <child
+      link="Link_Left_Gripper_Left_Finger" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.4486"
+      upper="1.4486"
+      effort="2"
+      velocity="1" />
+  </joint>
+  <link
+    name="Link_Left_Gripper_Right_Knuckle">
+    <inertial>
+      <origin
+        xyz="-0.00490499257340637 -0.0188742316305838 0.00434594473240713"
+        rpy="0 0 0" />
+      <mass
+        value="0.00250170878495694" />
+      <inertia
+        ixx="5.06101238374518E-07"
+        ixy="1.21437308412479E-07"
+        ixz="1.37516669096001E-09"
+        iyy="6.99859950764481E-08"
+        iyz="5.21935514300145E-09"
+        izz="5.61288287008173E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Gripper_Right_Knuckle.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Gripper_Right_Knuckle.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Left_Gripper_Right_Knuckle"
+    type="revolute">
+    <origin
+      xyz="0.026286 -0.016009 -0.039479"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Left_Gripper" />
+    <child
+      link="Link_Left_Gripper_Right_Knuckle" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.4486"
+      upper="1.4486"
+      effort="7"
+      velocity="20.94" />
+  </joint>
+  <link
+    name="Link_Left_Gripper_Right_Finger">
+    <inertial>
+      <origin
+        xyz="-0.0164538254324624 -0.00122020528380401 0.00429367232956335"
+        rpy="0 0 0" />
+      <mass
+        value="0.00178950665854094" />
+      <inertia
+        ixx="7.67289874039957E-08"
+        ixy="4.12117074287722E-14"
+        ixz="4.03187609685752E-11"
+        iyy="5.86774350121152E-08"
+        iyz="3.67557190962139E-12"
+        izz="1.23631686463325E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Gripper_Right_Finger.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Left_Gripper_Right_Finger.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Left_Gripper_Right_Finger"
+    type="revolute">
+    <origin
+      xyz="-0.0098022 -0.037748 -0.00051048"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Left_Gripper_Right_Knuckle" />
+    <child
+      link="Link_Left_Gripper_Right_Finger" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.4486"
+      upper="1.4486"
+      effort="2"
+      velocity="1" />
+  </joint>
+  <link
+    name="Link_Camera_Gripper_Left">
+    <inertial>
+      <origin
+        xyz="-0.0111981750723334 0.000157776652766645 -0.000508189864462383"
+        rpy="0 0 0" />
+      <mass
+        value="0.0181515051150603" />
+      <inertia
+        ixx="6.87706656071185E-06"
+        ixy="-4.30793000145343E-09"
+        ixz="-6.71843851530483E-08"
+        iyy="4.49676030067235E-06"
+        iyz="2.68035022756456E-08"
+        izz="4.33798533652848E-06" />
+    </inertial>
+  </link>
+  <joint
+    name="Joint_Camera_Gripper_Left"
+    type="fixed">
+    <origin
+      xyz="0.0615261707233548 0.000562149011922752 -0.142477793553736"
+      rpy="3.1413843595643 1.29239449204491 3.14139237974373" />
+    <parent
+      link="Link_Left_Wrist_Lower_to_Gripper" />
+    <child
+      link="Link_Camera_Gripper_Left" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="Link_Right_Shoulder_Inner_to_Shoulder_Outer">
+    <inertial>
+      <origin
+        xyz="0.00114 -0.01511 -4E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.3416" />
+      <inertia
+        ixx="0.00133"
+        ixy="2E-05"
+        ixz="0"
+        iyy="0.00042"
+        iyz="0"
+        izz="0.00131" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Shoulder_Inner_to_Shoulder_Outer.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Shoulder_Inner_to_Shoulder_Outer.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Right_Shoulder_Inner"
+    type="revolute">
+    <origin
+      xyz="0 -0.15176 0.27495"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Waist_Yaw_to_Shoulder_Inner" />
+    <child
+      link="Link_Right_Shoulder_Inner_to_Shoulder_Outer" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-2.932"
+      upper="2.932"
+      effort="97"
+      velocity="6.2831" />
+  </joint>
+  <link
+    name="Link_Right_Shoulder_Outer_to_UpperArm">
+    <inertial>
+      <origin
+        xyz="-0.0041634 -0.0071979 -0.059091"
+        rpy="0 0 0" />
+      <mass
+        value="2.259" />
+      <inertia
+        ixx="0.01052"
+        ixy="3E-05"
+        ixz="0.00015"
+        iyy="0.01007"
+        iyz="-0.0006"
+        izz="0.00356" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Shoulder_Outer_to_UpperArm.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Shoulder_Outer_to_UpperArm.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Right_Shoulder_Outer"
+    type="revolute">
+    <origin
+      xyz="0 -0.064936 0"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Right_Shoulder_Inner_to_Shoulder_Outer" />
+    <child
+      link="Link_Right_Shoulder_Outer_to_UpperArm" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-3.1416"
+      upper="0.19198621771937624"
+      effort="97"
+      velocity="6.2831" />
+  </joint>
+  <link
+    name="Link_Right_UpperArm_to_Elbow">
+    <inertial>
+      <origin
+        xyz="0.01531 0.00288 -0.10419"
+        rpy="0 0 0" />
+      <mass
+        value="1.1071" />
+      <inertia
+        ixx="0.00208"
+        ixy="-4E-05"
+        ixz="0.00041"
+        iyy="0.00236"
+        iyz="7E-05"
+        izz="0.00121" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_UpperArm_to_Elbow.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_UpperArm_to_Elbow.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Right_UpperArm"
+    type="revolute">
+    <origin
+      xyz="0 -0.011 -0.1635"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Right_Shoulder_Outer_to_UpperArm" />
+    <child
+      link="Link_Right_UpperArm_to_Elbow" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-2.914"
+      upper="2.914"
+      effort="97"
+      velocity="6.2831" />
+  </joint>
+  <link
+    name="Link_Right_Elbow_to_Forearm">
+    <inertial>
+      <origin
+        xyz="-0.022582 -0.00070448 -0.044993"
+        rpy="0 0 0" />
+      <mass
+        value="0.7046" />
+      <inertia
+        ixx="0.0021"
+        ixy="2E-05"
+        ixz="-0.00016"
+        iyy="0.00204"
+        iyz="3E-05"
+        izz="0.00145" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Elbow_to_Forearm.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Elbow_to_Forearm.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Right_Elbow"
+    type="revolute">
+    <origin
+      xyz="0.025 0 -0.1241"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Right_UpperArm_to_Elbow" />
+    <child
+      link="Link_Right_Elbow_to_Forearm" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-2.618"
+      upper="0"
+      effort="97"
+      velocity="6.2831" />
+  </joint>
+  <link
+    name="Link_Right_Forearm_to_Wrist_Upper">
+    <inertial>
+      <origin
+        xyz="-0.00090809 3.2566E-07 -0.033094"
+        rpy="0 0 0" />
+      <mass
+        value="0.18" />
+      <inertia
+        ixx="0.00022"
+        ixy="0"
+        ixz="0"
+        iyy="0.00037"
+        iyz="0"
+        izz="0.00037" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Forearm_to_Wrist_Upper.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Forearm_to_Wrist_Upper.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Right_Forearm"
+    type="revolute">
+    <origin
+      xyz="-0.024623 0 -0.12208"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Right_Elbow_to_Forearm" />
+    <child
+      link="Link_Right_Forearm_to_Wrist_Upper" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-2.9496"
+      upper="2.9496"
+      effort="27"
+      velocity="5.236" />
+  </joint>
+  <link
+    name="Link_Right_Wrist_Upper_to_Wrist_Lower">
+    <inertial>
+      <origin
+        xyz="-0.0026636 -0.00079365 -0.028038"
+        rpy="0 0 0" />
+      <mass
+        value="0.9312" />
+      <inertia
+        ixx="0.00199"
+        ixy="-3E-05"
+        ixz="-1E-05"
+        iyy="0.00195"
+        iyz="3E-05"
+        izz="0.00126" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Wrist_Upper_to_Wrist_Lower.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Wrist_Upper_to_Wrist_Lower.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Right_Wrist_Upper"
+    type="revolute">
+    <origin
+      xyz="0.00019224 0 -0.0623"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Right_Forearm_to_Wrist_Upper" />
+    <child
+      link="Link_Right_Wrist_Upper_to_Wrist_Lower" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-1.396"
+      upper="1.396"
+      effort="27"
+      velocity="5.236" />
+  </joint>
+  <link
+    name="Link_Right_Wrist_Lower_to_Gripper">
+    <inertial>
+      <origin
+        xyz="0.00372 0.0023 -0.09432"
+        rpy="0 0 0" />
+      <mass
+        value="0.15" />
+      <inertia
+        ixx="0.00052"
+        ixy="0"
+        ixz="1E-05"
+        iyy="0.00043"
+        iyz="-3E-05"
+        izz="0.00021" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Wrist_Lower_to_Gripper.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Wrist_Lower_to_Gripper.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Right_Wrist_Lower"
+    type="revolute">
+    <origin
+      xyz="0.00018267 0 -0.0592"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Right_Wrist_Upper_to_Wrist_Lower" />
+    <child
+      link="Link_Right_Wrist_Lower_to_Gripper" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-1.4486"
+      upper="1.4486"
+      effort="27"
+      velocity="5.236" />
+  </joint>
+  <link
+    name="Link_Right_FT_Sensor">
+    <inertial>
+      <origin
+        xyz="6.34216066911468E-05 0.000835076818198638 0.0100519678533582"
+        rpy="0 0 0" />
+      <mass
+        value="0.0139672020684513" />
+      <inertia
+        ixx="5.82212449018894E-06"
+        ixy="-1.71057698221436E-08"
+        ixz="2.20546302056534E-08"
+        iyy="6.24737298408959E-06"
+        iyz="5.69278686093213E-08"
+        izz="1.13884201901148E-05" />
+    </inertial>
+  </link>
+  <joint
+    name="Joint_Right_FT_Sensor"
+    type="fixed">
+    <origin
+      xyz="0.00017357 0 -0.05625"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Right_Wrist_Lower_to_Gripper" />
+    <child
+      link="Link_Right_FT_Sensor" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="Link_Right_Gripper">
+    <inertial>
+      <origin
+        xyz="8.27444392077496E-05 -1.4063472608683E-12 -0.0268151984279994"
+        rpy="0 0 0" />
+      <mass
+        value="0.00736037063010909" />
+      <inertia
+        ixx="9.46908719341276E-07"
+        ixy="-5.26397964894665E-07"
+        ixz="4.40533594840491E-09"
+        iyy="1.48892735246391E-06"
+        iyz="-1.62432158641912E-09"
+        izz="2.37454341223949E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Gripper.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Gripper.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Right_Gripper"
+    type="revolute">
+    <origin
+      xyz="0.00040762 0 -0.1321"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Right_Wrist_Lower_to_Gripper" />
+    <child
+      link="Link_Right_Gripper" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.4486"
+      upper="1.4486"
+      effort="7"
+      velocity="20.94" />
+  </joint>
+  <link
+    name="Link_Right_Gripper_Right_Knuckle">
+    <inertial>
+      <origin
+        xyz="-0.0044741719687183 -0.017178668437063 0.00426124456769494"
+        rpy="0 0 0" />
+      <mass
+        value="0.00274859742256498" />
+      <inertia
+        ixx="5.09280935645512E-07"
+        ixy="1.21451010828017E-07"
+        ixz="1.4857848648061E-09"
+        iyy="7.31245703941533E-08"
+        iyz="5.46301913025768E-09"
+        izz="5.62569224668392E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Gripper_Right_Knuckle.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Gripper_Right_Knuckle.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Right_Gripper_Right_Knuckle"
+    type="revolute">
+    <origin
+      xyz="0.026374 -0.016012 -0.039419"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Right_Gripper" />
+    <child
+      link="Link_Right_Gripper_Right_Knuckle" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.4486"
+      upper="1.4486"
+      effort="7"
+      velocity="20.94" />
+  </joint>
+  <link
+    name="Link_Right_Gripper_Right_Finger">
+    <inertial>
+      <origin
+        xyz="-0.016463377492591 -0.00121999989768817 0.00425695855762021"
+        rpy="0 0 0" />
+      <mass
+        value="0.00178950665854077" />
+      <inertia
+        ixx="7.67294018791835E-08"
+        ixy="2.25527228540391E-15"
+        ixz="1.45139350395968E-10"
+        iyy="5.8677434804018E-08"
+        iyz="2.3935245569655E-18"
+        izz="1.23631272196216E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Gripper_Right_Finger.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Gripper_Right_Finger.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Right_Gripper_Right_Finger"
+    type="revolute">
+    <origin
+      xyz="-0.0098009 -0.037748 -0.00053025"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Right_Gripper_Right_Knuckle" />
+    <child
+      link="Link_Right_Gripper_Right_Finger" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.4486"
+      upper="1.4486"
+      effort="2"
+      velocity="1" />
+  </joint>
+  <link
+    name="Link_Right_Gripper_Left_Knuckle">
+    <inertial>
+      <origin
+        xyz="0.0048930521981868 0.0188739968752705 0.00266392664522508"
+        rpy="0 0 0" />
+      <mass
+        value="0.00250170878495695" />
+      <inertia
+        ixx="5.06091875842274E-07"
+        ixy="1.21455885700336E-07"
+        ixz="-1.15099486885357E-09"
+        iyy="6.99848511056846E-08"
+        iyz="-4.71347429254867E-09"
+        izz="5.61298793511187E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Gripper_Left_Knuckle.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Gripper_Left_Knuckle.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Right_Gripper_Left_Knuckle"
+    type="revolute">
+    <origin
+      xyz="-0.02613 0.016012 -0.039581"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Right_Gripper" />
+    <child
+      link="Link_Right_Gripper_Left_Knuckle" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.4486"
+      upper="1.4486"
+      effort="7"
+      velocity="20.94" />
+  </joint>
+  <link
+    name="Link_Right_Gripper_Left_Finger">
+    <inertial>
+      <origin
+        xyz="0.0164364658914917 0.00121999989609564 0.00435847856290472"
+        rpy="0 0 0" />
+      <mass
+        value="0.00178950665854077" />
+      <inertia
+        ixx="7.67294018791839E-08"
+        ixy="2.25527236681823E-15"
+        ixz="1.45139350395986E-10"
+        iyy="5.86774348040181E-08"
+        iyz="2.39357097314664E-18"
+        izz="1.23631272196217E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Gripper_Left_Finger.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="/home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/meshes/robot_v3_1/Link_Right_Gripper_Left_Finger.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Joint_Right_Gripper_Left_Finger"
+    type="revolute">
+    <origin
+      xyz="0.009804 0.037748 -0.00046975"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Right_Gripper_Left_Knuckle" />
+    <child
+      link="Link_Right_Gripper_Left_Finger" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.4486"
+      upper="1.4486"
+      effort="2"
+      velocity="1" />
+  </joint>
+  <link
+    name="Link_Camera_Gripper_Right">
+    <inertial>
+      <origin
+        xyz="-0.0111981760848628 0.000157778940689052 -0.00050819282635442"
+        rpy="0 0 0" />
+      <mass
+        value="0.018151496907862" />
+      <inertia
+        ixx="6.87706519247323E-06"
+        ixy="-4.30748263753418E-09"
+        ixz="-6.71847837921287E-08"
+        iyy="4.49675996039126E-06"
+        iyz="2.68040749082974E-08"
+        izz="4.33798338322976E-06" />
+    </inertial>
+  </link>
+  <joint
+    name="Joint_Camera_Gripper_Right"
+    type="fixed">
+    <origin
+      xyz="0.06155 0.00055419 -0.14226"
+      rpy="3.1416 1.2946 3.1416" />
+    <parent
+      link="Link_Right_Wrist_Lower_to_Gripper" />
+    <child
+      link="Link_Camera_Gripper_Right" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="Link_Torso_Extra_Mass">
+    <inertial>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <mass
+        value="15.0" />
+      <inertia
+        ixx="0.000001"
+        ixy="0"
+        ixz="0"
+        iyy="0.000001"
+        iyz="0"
+        izz="0.000001" />
+    </inertial>
+  </link>
+  <joint
+    name="Joint_Torso_Extra_Mass"
+    type="fixed">
+    <origin
+      xyz="-0.001173 -0.000195 0.173238"
+      rpy="0 0 0" />
+    <parent
+      link="Link_Waist_Yaw_to_Shoulder_Inner" />
+    <child
+      link="Link_Torso_Extra_Mass" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="Link_Lidar_Front">
+    <inertial>
+      <origin
+        xyz="-0.00642825383078954 2.55632570869804E-05 -0.0134727618679212"
+        rpy="0 0 0" />
+      <mass
+        value="0.104552270392136" />
+      <inertia
+        ixx="3.72276189202763E-05"
+        ixy="2.8260500889359E-08"
+        ixz="-3.80570891784606E-06"
+        iyy="3.52859155398642E-05"
+        iyz="-1.85184143283661E-08"
+        izz="4.36567077333914E-05" />
+    </inertial>
+  </link>
+  <joint
+    name="Joint_Lidar_Front"
+    type="fixed">
+    <origin
+      xyz="0.26173 0 0.17353"
+      rpy="0 0.4363323129985824 0" />
+    <parent
+      link="Link_Zero_Point" />
+    <child
+      link="Link_Lidar_Front" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="Link_Lidar_Back">
+    <inertial>
+      <origin
+        xyz="-0.0003119784679457 -7.67918007895364E-05 -0.0139308615599391"
+        rpy="0 0 0" />
+      <mass
+        value="0.0318022912059703" />
+      <inertia
+        ixx="1.07749241757706E-05"
+        ixy="2.41387598011327E-09"
+        ixz="4.21767243327887E-09"
+        iyy="1.0785261712119E-05"
+        iyz="-1.6156071091176E-08"
+        izz="1.95834162573154E-05" />
+    </inertial>
+  </link>
+  <joint
+    name="Joint_Lidar_Back"
+    type="fixed">
+    <origin
+      xyz="-0.2276 0 0.145"
+      rpy="0 0 -3.1416" />
+    <parent
+      link="Link_Zero_Point" />
+    <child
+      link="Link_Lidar_Back" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="Link_IMU">
+    <inertial>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <mass
+        value="0" />
+      <inertia
+        ixx="0"
+        ixy="0"
+        ixz="0"
+        iyy="0"
+        iyz="0"
+        izz="0" />
+    </inertial>
+  </link>
+  
+</robot>

@@ -11,7 +11,7 @@ from scipy.optimize import least_squares
 from scipy.spatial.transform import Rotation, Slerp
 from autolife_handeye_calibration_306.core import Kinematics, ARMS, TORSO
 from autolife_handeye_calibration_306.verification_core import wrist_frame
-from autolife_handeye_calibration_306.auto_plan_worker import CollisionGuard
+from .grasp_collision import CollisionGuard
 from autolife_handeye_calibration_306.verification_trajectory import JointPath
 from control_center_joint_control.joint_definitions import GROUPS
 from .core import stages
@@ -52,10 +52,14 @@ def withdrawal_freedom(distance):
 
 
 class Planner:
+    guard_factory=CollisionGuard
     def __init__(self,cfg):
+        from .grip_width import calibrated_max_width
+        cfg=dict(cfg)
+        cfg['gripper_max_width_m']=calibrated_max_width(cfg)
         self.cfg=cfg;self.fk=Kinematics(cfg['urdf_path'])
-        # No marker is attached in this task. Preserve a conservative tool envelope.
-        self.guard=CollisionGuard({**cfg,'board_envelope_radius_m':.09})
+        # 普通抓取无标定板，仅使用机器人的真实碰撞模型。
+        self.guard=self.guard_factory(cfg)
         self.names=ARMS[cfg['arm']]
         limits={n:(lo,hi) for n,_,lo,hi in GROUPS[cfg['arm']+'_arm']['joints']}
         self.joint_limit_policy=load_arm_policy(cfg,self.names,limits)
@@ -79,12 +83,25 @@ class Planner:
         self.wrist_frame=self.pose_model.getFrameId(wrist_frame(cfg))
         if max(self.torso_frame,self.wrist_frame)>=self.pose_model.nframes:raise ValueError('URDF缺少抓取坐标系')
 
+    def candidates(self,yaws=None):
+        return approach_candidates(yaws)
+
+    def has_common_carry_target(self):
+        return True
+
+    def carry_target(self,source):
+        return carry_goal(self.cfg,source,self.names)
+
     def reset_plan(self,source):
+        if self.cfg.get('workspace_reset_joints'):
+            from .workspace_reset import build_plan
+            return build_plan(self,source)
         from autolife_handeye_calibration_306.core import NECK
         from .reset_recovery import recovery_target,check_recovery_geometry
         names=ARMS['left']+ARMS['right']+NECK;goal=dict(source)
         for group,ns in [('left_arm',ARMS['left']),('right_arm',ARMS['right']),('neck',NECK)]:
             goal.update(zip(ns,self.cfg['initial_pose_deg'][group]))
+        self.guard.begin_fixed_neck(source,goal)
         # User empties jaws before reset. Opening runs concurrently; the tool
         # envelope covers the full jaw sweep rather than just the closed model.
         reset_source,changes=recovery_target(source,goal,self.guard.kin)
@@ -231,16 +248,17 @@ class Planner:
                 if distance<.005:raise CollisionFailure('携带饮料可能碰到机器人：'+obj.name)
 
     def plan(self,source,tcp,center,product):
+        self.guard.begin_fixed_neck(source)
         started=time.monotonic();failures=[];late_failures=set()
         self.candidate_failures=failures
         yaws=None
         if 'bbox_axes_torso' in product:
             yaws=list(directional_yaws(product,self.cfg))
             if not yaws:return self._local_contact_plan(source,tcp,center,product,started)
-        if self.cfg.get('fixed_carry_enabled',False):
+        if self.cfg.get('fixed_carry_enabled',False) and self.has_common_carry_target():
             # A bad common endpoint cannot be repaired by searching grasp yaws.
-            self.check(carry_goal(self.cfg,source,self.names),tcp,True,product)
-        for yaw_offset,flexible,profile in approach_candidates(yaws):
+            self.check(self.carry_target(source),tcp,True,product)
+        for yaw_offset,flexible,profile in self.candidates(yaws):
             # These alternatives only change the pregrasp. If the direct route
             # already reached it and failed later, prioritize another direction
             # over five near-identical replays of the same carry endpoint.
@@ -281,12 +299,12 @@ class Planner:
                    'local_contact_torso':choice['contact'].tolist(),
                    'local_required_opening_m':choice['required_opening_m']}
             try:
-                if self.cfg.get('fixed_carry_enabled',False):self.check(carry_goal(self.cfg,source,self.names),virtual,True,local)
+                if self.cfg.get('fixed_carry_enabled',False) and self.has_common_carry_target():self.check(self.carry_target(source),virtual,True,local)
             except CollisionFailure as exc:
                 failures.append(dict(stage_index=4,reason=str(exc)));continue
             # Local geometry is verified with actual IK orientation at every
             # inserted point; use strict orientation rather than 30deg flex.
-            for yaw,flexible,profile in approach_candidates([choice['yaw']]):
+            for yaw,flexible,profile in self.candidates([choice['yaw']]):
                 if flexible:continue
                 self._candidate_stage=0
                 try:
@@ -316,7 +334,7 @@ class Planner:
         No reset API, jaw opening, new IK endpoint or unchecked shortcut. The
         interpolation is exactly the JointPath used by the executor.
         """
-        goal=carry_goal(self.cfg,source,self.names)
+        goal=self.carry_target(source)
         # Clearance is a bend in ONE checked curve, not a stop or a separate
         # retreat. Recheck the new PCHIP: appending the goal changes curvature.
         waypoints=[source,goal] if clearance_waypoints is None else [*clearance_waypoints,goal]
@@ -404,7 +422,7 @@ class Planner:
         posture=None
         if profile.startswith('elbow_'):
             posture=np.deg2rad([source[n] for n in self.names])
-            posture[1]+=np.deg2rad(20. if profile=='elbow_positive' else -20.)
+            posture[getattr(self,'arm_bias_index',1)]+=np.deg2rad(20. if profile=='elbow_positive' else -20.)
             posture=np.clip(posture,*self.bounds)
         if np.linalg.norm(st[0][1]-p0)>.65:raise ValueError('预抓取点距所选夹爪超过65cm，请先调整起始姿态')
         route=[];pending_checks=[];checked=0;nominal=desired.copy();max_deviation=0.
@@ -420,7 +438,7 @@ class Planner:
                 seed=dict(source)
                 if profile!='joint_direct':
                     values=np.deg2rad([source[n] for n in self.names])
-                    values[1]+=np.deg2rad(20. if profile=='joint_elbow_positive' else -20.)
+                    values[getattr(self,'arm_bias_index',1)]+=np.deg2rad(20. if profile=='joint_elbow_positive' else -20.)
                     seed.update(zip(self.names,np.rad2deg(np.clip(values,*self.bounds))))
                 goal=self.solve(seed,tcp,endpoint,desired,flexible,global_goal=True)
                 count=max(2,int(np.ceil(max(abs(goal[n]-source[n]) for n in self.names)/2.))+1)
@@ -510,7 +528,7 @@ class Planner:
             segment,count=self._carry_segment(clearance[0] if continuous else previous,
                 tcp,product,grasp_rotation,started,clearance)
             route.append(segment);checked+=count
-            target=carry_goal(cfg,source,self.names)
+            target=self.carry_target(source)
             carry_metadata={'carry_protocol_version':2 if continuous else 1,
                             'carry_pose_deg':[target[n] for n in self.names]}
         grasp_q=next(s for s in route if s.get('phase')=='grasp')['waypoints'][-1]

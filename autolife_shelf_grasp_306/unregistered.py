@@ -2,7 +2,7 @@
 import re
 import uuid
 import numpy as np
-from .bottle import object_points,horizontal_basis,image_cropped,estimate,DepthQualityError
+from .bottle import object_points,horizontal_basis,image_cropped,estimate,DepthQualityError,cylinder_foreground
 from .core import unit
 from .object_extent import coherent_component,oriented_bounds,footprint_vertices,bbox
 
@@ -100,14 +100,20 @@ def estimate_temporary(frame,mask,T,up,template,cfg,reference=None):
         return estimate_partial(frame,mask,T,up,template,cfg,reference)
     points,pixels,bounds=object_points(frame,mask,T,cfg)
     if template['geometry']=='cylinder':
+        foreground=cylinder_foreground(points,pixels,up,cfg['gripper_max_width_m'])
+        foreground_ratio=float(foreground.mean())
+        points,pixels=points[foreground],pixels[foreground]
         local,low,high,basis=measured_bounds(points,up,T[:3,3]);width,depth,height=high-low
         body=local[(local[:,2]>low[2]+height*.18)&(local[:,2]<low[2]+height*.7)]
         if len(body)<80:raise DepthQualityError('未录入瓶身中央深度不足')
         width=float(np.diff(np.percentile(body[:,0],[.5,99.5]))[0]+.002)
-        if not .015<=width<=.09 or not .04<=height<=.4:
-            raise DepthQualityError('实测瓶身尺寸超出夹爪可用范围，请检查分割和深度')
+        aperture=float(cfg['gripper_max_width_m'])
+        if not .015<=width<=aperture or not .04<=height<=.4:
+            raise DepthQualityError(f'瓶身几何不通过：估算直径{width*1000:.1f}mm、高{height*1000:.1f}mm；'
+                                    f'夹爪最大净开口{aperture*1000:.0f}mm。请核对物体点云与姿态模型')
         product={**template,'diameter_m':width,'height_m':float(height),'depth_m':width}
-        center,stats=estimate(frame,mask,T,up,product,cfg)
+        center,stats=estimate(frame,mask,T,up,product,cfg,observed=(points,pixels,bounds))
+        stats['bottle_foreground_ratio']=foreground_ratio
     else:
         keep=coherent_component(points);points=points[keep];pixels=pixels[keep]
         local,low,high,basis=oriented_bounds(points,up);width,depth,height=high-low
@@ -131,7 +137,9 @@ def estimate_temporary(frame,mask,T,up,template,cfg,reference=None):
 def estimate_partial(frame,mask,T,up,template,cfg,reference):
     """Fresh visible-part target, with full-view reference for hidden extent."""
     if reference is None:
-        raise DepthQualityError('局部可见物品尚无完整尺寸记录：请先完整入镜规划一次，之后可按可见部分夹取，无需录入商品')
+        if template['geometry']=='cylinder':
+            return estimate_visible_cylinder(frame,mask,T,up,template,cfg)
+        raise DepthQualityError('局部可见物品尚无完整尺寸记录：非瓶罐物品需要可靠的前后尺寸，瓶罐可直接使用可见瓶身')
     if reference.get('geometry')!=template['geometry']:raise DepthQualityError('物体形状与近期完整观察不一致')
     if np.any(mask[:,:2]) or np.any(mask[:,-2:]):
         raise DepthQualityError('夹取部位左右边界出画面，尚不能确认指间开度；请露出两侧边缘')
@@ -145,6 +153,60 @@ def estimate_partial(frame,mask,T,up,template,cfg,reference):
         raise DepthQualityError('当前可见尺寸超过完整观察记录，物体可能改变，请重新完整观察')
     stats.update(temporary_product=product,image_cropped=True,geometry_reference='recent_full_view',
                  dimension_source='recent_full_view_with_live_depth',height_source='visible_part_midpoint')
+    return center,stats
+
+
+def visible_cylinder_edges(frame,mask,T,up,points,pixels,body):
+    """在图像中沿瓶身竖直轴判断裁切部位；瓶盖碰边不等于指间瓶身被裁切。"""
+    import cv2
+    center=np.median(points,axis=0)
+    probe=np.array([center,center+np.asarray(up)*.01])
+    camera=(probe-T[:3,3])@T[:3,:3]
+    projected=cv2.projectPoints(camera,np.zeros(3),np.zeros(3),frame['K'],frame['D'])[0][:,0,:]
+    direction=projected[1]-projected[0];length=np.linalg.norm(direction)
+    if length<.5:raise DepthQualityError('视线过于接近瓶身竖轴，无法确认可见夹取横截面')
+    direction/=length
+    yy,xx=np.where(mask);axis=np.c_[xx,yy]@direction
+    edge=(xx<2)|(xx>=mask.shape[1]-2)|(yy<2)|(yy>=mask.shape[0]-2)
+    clipped=axis[edge];low,high=np.percentile(axis,[.5,99.5]);span=high-low
+    b0,b1=np.percentile(pixels[body]@direction,[0,100])
+    if np.any((clipped>=b0-2)&(clipped<=b1+2)):
+        raise DepthQualityError('可夹瓶身横截面被画面边缘裁断，无法从当前图像确认两指开口；请露出瓶身两侧')
+    return dict(bottom_observed=not bool(np.any(clipped<low+.2*span)),
+                top_observed=not bool(np.any(clipped>high-.2*span)),
+                boundary_pixels=int(edge.sum()))
+
+
+def estimate_visible_cylinder(frame,mask,T,up,template,cfg):
+    """没有尺寸历史也能按实测可见瓶身夹取；未见高度只作为保守包络上界。"""
+    points,pixels,bounds=object_points(frame,mask,T,cfg)
+    keep=cylinder_foreground(points,pixels,up,cfg['gripper_max_width_m'])
+    points,pixels=points[keep],pixels[keep]
+    local,low,high,basis=measured_bounds(points,up,T[:3,3]);height=float(high[2]-low[2])
+    body=(local[:,2]>low[2]+height*.18)&(local[:,2]<low[2]+height*.70)
+    if body.sum()<80:raise DepthQualityError('可见瓶身中央有效深度不足')
+    evidence=visible_cylinder_edges(frame,mask,T,up,points,pixels,body)
+    # 瓶盖只有侧边出画面时，仍可用实测水平顶面确定顶部高度，不能仅凭碰边就猜一个大包络。
+    top=local[local[:,2]>high[2]-.004]
+    if len(top)>=40:
+        values,vectors=np.linalg.eigh(np.cov(top.T))
+        spans=np.ptp(np.percentile(top[:,:2],[5,95],axis=0),axis=0)
+        if min(spans)>=.012 and abs(vectors[2,0])>=.90 and np.sqrt(max(0.,values[0]))<=.002:
+            evidence.update(top_observed=True,top_evidence='measured_cap_plane',
+                cap_points=len(top),cap_plane_residual_mm=float(np.sqrt(max(0.,values[0]))*1000))
+    width=float(np.diff(np.percentile(local[body,0],[.5,99.5]))[0]+.002)
+    # 沿用当前瓶罐模型支持的15～90毫米直径、40厘米高度范围；不提高夹爪开口。
+    if not .015<=width<=cfg['gripper_max_width_m'] or not .04<=height<=.4:
+        raise DepthQualityError(f'可见瓶身实测直径{width*1000:.1f}mm、高{height*1000:.1f}mm不在支持范围')
+    product={**template,'diameter_m':width,'height_m':height,'depth_m':width,
+             'dimension_source':'partial_current_rgbd','partial_geometry':True,
+             'height_upper_bound_m':.4,'placement_bottom_observed':evidence['bottom_observed']}
+    center,stats=estimate(frame,mask,T,up,product,cfg,observed=(points,pixels,bounds))
+    product['height_m']=stats['observed_height_mm']/1000.
+    if evidence['bottom_observed'] and evidence['top_observed']:
+        product['height_upper_bound_m']=min(.4,product['height_m']+.005)
+    stats.update(temporary_product=product,image_cropped=True,dimension_source='partial_current_rgbd',
+                 height_source='visible_bottle_midpoint',partial_evidence=evidence)
     return center,stats
 
 
@@ -175,6 +237,12 @@ def combine_product(template,samples):
             'dimension_frames':len(samples),'dimension_observed_frames':observed,'dimension_inlier_indices':indices,
             'dimension_fusion':'common_axes_majority','dimension_raw_spread_mm':raw_spread.tolist(),
             'dimension_spread_mm':(np.ptp(dimensions,axis=0)*1000).tolist()}
+    partial=[bool(p.get('partial_geometry')) for p in products]
+    if any(partial):
+        if not all(partial):raise ValueError('完整与局部观测混合，请停稳后重新规划')
+        result.update(partial_geometry=True,dimension_source='partial_current_rgbd',
+            height_upper_bound_m=max(p['height_upper_bound_m'] for p in products),
+            placement_bottom_observed=all(p.get('placement_bottom_observed',False) for p in products))
     references=[s[1].get('geometry_reference') for s in samples]
     if any(references):
         if not all(v=='recent_full_view' for v in references):raise ValueError('完整与局部观测混合，请停稳后重新规划')

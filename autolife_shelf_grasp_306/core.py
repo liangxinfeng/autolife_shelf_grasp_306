@@ -30,8 +30,8 @@ def unit(x):
 def corrected_target(center,offset_mm):
     """Fixed torso-frame target correction, independent of camera/tool rotation.
 
-    On this URDF, the right shoulder has positive torso Y (left has negative
-    Y). Do not assume this model uses the ROS base-link left-positive axis.
+    S3 torso: +X forward, +Y robot-left, +Z up. UI performs its signed
+    human-direction conversion before this function; do not apply it twice.
     """
     offset=np.asarray(offset_mm,float);center=np.asarray(center,float)
     if (offset.shape!=(3,) or not np.isfinite(offset).all() or np.linalg.norm(offset)>50.

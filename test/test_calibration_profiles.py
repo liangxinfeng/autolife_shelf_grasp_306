@@ -99,7 +99,7 @@ def test_real_306_camera_and_tcp():
         marker=np.asarray(data['report']['T_wrist_marker'])
         assert np.allclose(tcp,marker[:3,3]+marker[:3,:3]@np.array([0.,0.,-.015]))
         assert not sc['tool_geometry']['provisional']
-        assert np.allclose(load_geometry(data,fk,15,robot_id=306),tcp)
+        assert np.allclose(load_geometry(data,fk,15,robot_id=345),tcp)
     assert right['calibration_profile']['test_only']
     assert rd['report']['fixed_head_pass'] is False
     assert rd['report']['moving_head_pass'] is False
@@ -108,11 +108,11 @@ def test_real_306_camera_and_tcp():
     assert np.allclose(rs['K'],ls['K'],rtol=0,atol=1e-5)
     assert np.allclose(rs['D'],ls['D'],rtol=0,atol=1e-7)
     frame={'image':np.zeros(rs['image_shape'],dtype=np.uint8),'K':np.array(rs['K']),'D':np.array(rs['D'])}
-    rt=camera_transform(rd,fk,rs['q_deg'],frame,robot_id=306)
-    lt=camera_transform(ld,fk,rs['q_deg'],frame,robot_id=306)
+    rt=camera_transform(rd,fk,rs['q_deg'],frame,robot_id=345)
+    lt=camera_transform(ld,fk,rs['q_deg'],frame,robot_id=345)
     assert np.allclose(rt,np.array(rs['H'])@np.array(rd['report']['T_mount_camera']))
     assert not np.allclose(rt,lt)
-    print('REAL_PROFILE_GEOMETRY',json.dumps({'right_tcp_mm':(load_geometry(rd,fk,15,robot_id=306)*1000).tolist(),
+    print('REAL_PROFILE_GEOMETRY',json.dumps({'right_tcp_mm':(load_geometry(rd,fk,15,robot_id=345)*1000).tolist(),
         'camera_translation_difference_mm':float(np.linalg.norm(rt[:3,3]-lt[:3,3])*1000),
         'right_profile':right['calibration_profile'],'left_profile':left['calibration_profile']}))
 

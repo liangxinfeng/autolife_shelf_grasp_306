@@ -78,7 +78,7 @@ class StationaryBaseGuard:
         from rclpy.qos import qos_profile_sensor_data
         from control_center_chassis_guard import ChassisControlLease
         self.time=time;self.math=math;self.last=None;self.origin=None;self.stamp=None
-        self.lease=ChassisControlLease(domain_id='0',robot_id='306')
+        self.lease=ChassisControlLease(domain_id='0',robot_id='345')
         if not self.lease.acquire(timeout_sec=0):
             self.lease.shutdown();raise ValueError('放置时底盘控制权不可用')
         def callback(m):
@@ -88,7 +88,7 @@ class StationaryBaseGuard:
             p=m.pose.pose.position;r=m.pose.pose.orientation;v=m.twist.twist
             self.last=(time.monotonic(),p.x,p.y,math.atan2(2*(r.w*r.z+r.x*r.y),1-2*(r.y*r.y+r.z*r.z)),
                        math.hypot(v.linear.x,v.linear.y),abs(v.angular.z))
-        self.sub=node.create_subscription(Odometry,'/topic_gv_wheel_odom_0_306',callback,qos_profile_sensor_data)
+        self.sub=node.create_subscription(Odometry,'/topic_gv_wheel_odom_0_345',callback,qos_profile_sensor_data)
 
     def check(self):
         from .demo_config import wrap

@@ -19,7 +19,7 @@ def window(qt, tmp_path):
     (tmp_path/'data/task_flows.json').write_text(json.dumps({'自动递送':dict(steps=[dict(kind='grasp',target='盒子')])}),encoding='utf-8')
     w=Window(tmp_path,run,start_worker=False)
     w.timer.stop();w.automatic.timer.stop();w.navigation.product_timer.stop();w.studio.timer.stop()
-    w.ready=True;w.busy=False;w.blockers=[];w.module_tabs.setCurrentIndex(2)
+    w.ready=True;w.busy=False;w.blockers=[];w.module_tabs.setCurrentWidget(w.automatic)
     w.launch_motion=lambda *a,**k:pytest.fail('Tests must not issue motion')
     w.send=lambda action,**k:w.automatic.prepared({'status':'prepared'}) if action=='auto_prepare' else pytest.fail('Unexpected worker command')
     w.workflow.next=lambda:None
@@ -150,11 +150,14 @@ def test_real_auto_grasp_gate_on_auto_page(window,qt):
     w.process=None
 
 
-def test_margin50_clamped_and_validated():
+def test_margin50_clamped_and_validated(tmp_path):
     assert checked_margin(50)==50
     for value in (50.01,True,float('nan')):
         with pytest.raises(ValueError):checked_margin(value)
-    cmd=closing_command(.01,50,dict(gripper_max_width_m=.095,gripper_closed_deg=330,gripper_open_deg=10))
+    curve=tmp_path/'gripper.json'
+    curve.write_text(json.dumps(dict(robot_id=345,hardware='dm_type1',measured=True,
+        arms={'right':[[0,330],[50,180],[90,10]]})))
+    cmd=closing_command(.01,50,dict(arm='right',gripper_width_calibration=str(curve)))
     assert cmd['requested_width_mm']==0 and cmd['target_deg']==330
 
 

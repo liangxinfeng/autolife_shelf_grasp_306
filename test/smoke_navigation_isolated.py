@@ -16,8 +16,8 @@ from autolife_handeye_calibration_306.core import BODY,NECK,ARMS
 from autolife_shelf_grasp_306.navigation_logic import active_map
 rclpy.init();node=rclpy.create_node('dummy_navigation_test');tf=TransformBroadcaster(node)
 status=node.create_publisher(String,'/waypoints/navigation_status',QoSProfile(depth=10,durability=DurabilityPolicy.TRANSIENT_LOCAL))
-od=node.create_publisher(Odometry,'/topic_gv_wheel_odom_0_306',10)
-ar=node.create_publisher(String,'/topic_arm_whole_body_and_gripper_current_joints_status_0_306',10)
+od=node.create_publisher(Odometry,'/topic_gv_wheel_odom_0_345',10)
+ar=node.create_publisher(String,'/topic_arm_whole_body_and_gripper_current_joints_status_0_345',10)
 run=Path(tempfile.mkdtemp(prefix='grasp_nav_isolated_'));(run/'heartbeat').touch()
 q={n:0. for n in BODY+NECK+ARMS['left']+ARMS['right']+['Joint_Left_Gripper']}
 (run/'prepare_result.json').write_text(json.dumps(dict(status='prepared',q=q)))

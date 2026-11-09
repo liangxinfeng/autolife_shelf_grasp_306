@@ -57,7 +57,8 @@ class DemoNavigation:
             if data['blockers']:raise ValueError('；'.join(data['blockers']))
             if data['target']['product_id']!=self.demo_context['product_id']:raise ValueError('商品与演示选择不一致')
             full=json.loads((self.run/data['filename']).read_text());require_drink(full['product'])
-            if full.get('geometry',{}).get('image_cropped'):raise ValueError('需完整看到饮料，才能确定放置高度')
+            from .demo_config import require_placement_bottom
+            require_placement_bottom(full)
             self.demo_context['grasp_plan_id']=data['plan_id'];atomic_json(self.run/'demo_run.json',self.demo_context)
             self.demo_phase='grasp';self.launch_motion(data['filename'])
         except Exception as exc:self.demo_failure(str(exc))

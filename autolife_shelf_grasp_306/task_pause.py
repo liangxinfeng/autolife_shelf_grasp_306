@@ -35,8 +35,9 @@ class BridgePause:
             payload={GROUPS[g]['command_key']:[self.hold[name] for name,*_ in GROUPS[g]['joints']]
                      for g in ('left_arm','right_arm','neck','leg_waist')}
             n._publish_vendor(n._whole_body_pub,payload)
-            n._publish_vendor(n._gripper_pub,dict(left_gripper_target_joints_position=[self.hold['Joint_Left_Gripper']],
-                right_gripper_target_joints_position=[self.hold['Joint_Right_Gripper']]))
+            if not getattr(n,'preserve_loaded_grippers',False):
+                n._publish_vendor(n._gripper_pub,dict(left_gripper_target_joints_position=[self.hold['Joint_Left_Gripper']],
+                    right_gripper_target_joints_position=[self.hold['Joint_Right_Gripper']]))
             atomic_json(self.run/'pause_motion_status.json',dict(paused=True,time=time.time()))
         if max(abs(n._current[k]-v) for k,v in self.hold.items())>3.:
             n._lock('暂停保持姿态发生明显变化，请重新规划');return True
@@ -45,8 +46,9 @@ class BridgePause:
         elapsed=now-self.started;self.total+=elapsed;self.started=None;self.generation+=1
         state=getattr(n,'_action_state',None)
         if state:
-            for key in ('frame_started','frame_deadline','last_progress_at','hold_started'):
-                if key in state:state[key]+=elapsed
+            for key in ('frame_started','frame_deadline','last_progress_at','hold_started','jaw_steady_since'):
+                if state.get(key) is not None:state[key]+=elapsed
+            if state.get('jaw_arrival_gate'):state['jaw_arrival_gate']['start']+=elapsed
             state['commanded_values']={k:n._current[k] for k in state['commanded_values']}
         for goal in n._active_goals.values():
             goal['commands']={k:n._current[k] for k in goal['commands']}

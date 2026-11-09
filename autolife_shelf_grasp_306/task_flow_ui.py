@@ -6,12 +6,13 @@ from PyQt5 import QtCore as C, QtWidgets as Q
 from .task_flow import Cursor, KINDS, validate, select_candidates
 from .core import atomic_json
 from .task_pause import defer_call
+from .task_capabilities import uses_perception, require_perception
 
 
 class FlowDialog(Q.QDialog):
     def __init__(self, owner):
         super().__init__(owner); self.owner = owner; self.resize(1100, 580)
-        self.setWindowTitle('任务流程 · 导航 / 抓取 / 放置 / 固定动作 / 底盘定量')
+        self.setWindowTitle('任务流程 · 导航 / 抓取 / 放置 / 示教动作 / 底盘定量')
         self.path = owner.root / 'data/task_flows.json'
         self.library = json.loads(self.path.read_text('utf-8')) if self.path.exists() else {}
         layout = Q.QVBoxLayout(self); row = Q.QHBoxLayout(); layout.addLayout(row)
@@ -19,10 +20,13 @@ class FlowDialog(Q.QDialog):
         self.name = Q.QLineEdit(); self.name.setPlaceholderText('流程名称'); row.addWidget(self.name, 1)
         nav_row=Q.QHBoxLayout();layout.addLayout(nav_row)
         self.nav_note=Q.QLabel();self.nav_note.setWordWrap(True);nav_row.addWidget(self.nav_note,1)
+        if not owner.ready:
+            capability=Q.QLabel('当前视觉不可用：可编排并运行预录制动作、航点导航和底盘定量。含视觉抓取/放置的流程需恢复视觉后才能运行。')
+            capability.setWordWrap(True);layout.addWidget(capability)
         refresh=Q.QPushButton('刷新航点');refresh.clicked.connect(self.refresh_waypoints);nav_row.addWidget(refresh)
         self.navigation_button=Q.QPushButton('导航地图 / 定位');self.navigation_button.clicked.connect(self.navigation_map);nav_row.addWidget(self.navigation_button)
-        self.table = Q.QTableWidget(0, 5); self.table.setHorizontalHeaderLabels(['步骤类型', '航点 / 物品 / 固定动作名称','下蹲方向','下降高度(cm)','头部俯仰(°)'])
-        for col,width in ((0,85),(2,120),(3,135),(4,185)):self.table.setColumnWidth(col,width)
+        self.table = Q.QTableWidget(0, 5); self.table.setHorizontalHeaderLabels(['步骤类型', '航点 / 物品 / 示教动作名称','身体高度方式','下降高度(cm)','头部俯仰(°)'])
+        for col,width in ((0,85),(2,170),(3,135),(4,185)):self.table.setColumnWidth(col,width)
         self.table.horizontalHeader().setSectionResizeMode(1, Q.QHeaderView.Stretch)
         layout.addWidget(self.table, 1)
         row = Q.QHBoxLayout(); layout.addLayout(row)
@@ -31,7 +35,7 @@ class FlowDialog(Q.QDialog):
             button.clicked.connect(lambda _, k=kind: self.add(k, ''))
         for label, fn in [('删除步骤', self.remove), ('上移', lambda: self.move(-1)), ('下移', lambda: self.move(1))]:
             button = Q.QPushButton(label); row.addWidget(button); button.clicked.connect(fn)
-        note = Q.QLabel('高度为从最高站姿下降：正向0～56cm，反向0～53cm。头部0°正前方，正数俯视，负数仰视。\n导航途中调姿，二者完成后继续；抓取复位后调姿再识别；放置/固定动作开始前调姿。固定动作随后按记录的全身姿态回放。')
+        note = Q.QLabel('高度为从最高站姿下降：正向0～56cm，反向0～53cm。头部0°正前方，正数俯视，负数仰视。\n导航途中调姿，二者完成后继续；抓取复位后调姿再识别；放置/示教动作开始前调姿。示教动作默认沿用记录的身体高度及其全过程变化，不额外插入单独升降。')
         note.setWordWrap(True); layout.addWidget(note)
         row = Q.QHBoxLayout(); layout.addLayout(row)
         for label, fn in [('保存流程', self.save), ('删除流程', self.delete), ('开始流程', self.start)]:
@@ -100,18 +104,27 @@ class FlowDialog(Q.QDialog):
             box.deleteLater();box=BaseCell(self.table,base)
         self.table.setCellWidget(row, 1, box); self.table.selectRow(row)
         p=posture or {};direction=Q.QComboBox()
+        if kind=='action':direction.addItem('沿用动作高度','recorded')
         for label,value in [('保持当前','keep'),('正向下蹲','forward'),('反向下蹲','reverse')]:direction.addItem(label,value)
-        direction.setCurrentIndex(max(0,direction.findData(p.get('body_mode','keep'))))
+        direction.setCurrentIndex(max(0,direction.findData(p.get('body_mode','recorded' if kind=='action' and posture is None else 'keep'))))
         height=Q.QDoubleSpinBox();height.setDecimals(1);height.setSuffix(' cm')
         def sync_height():
             height.setMaximum(53. if direction.currentData()=='reverse' else 56.)
-            height.setEnabled(True)
-        direction.currentIndexChanged.connect(sync_height);sync_height();height.setValue(p.get('lowering_cm',0))
+            recorded=direction.currentData()=='recorded'
+            height.setEnabled(not recorded)
+            if recorded:
+                from .recorded_posture import summary
+                text,value=summary(self.owner.studio.records().get(box.currentText()))
+                height.setToolTip(text);direction.setToolTip(text)
+                blocked=height.blockSignals(True);height.setValue(value);height.blockSignals(blocked)
+            else:height.setToolTip('执行步骤前的高度设置；示教动作随后仍按记录的全身关节回放')
+        direction.currentIndexChanged.connect(sync_height);height.setValue(p.get('lowering_cm',0));sync_height()
+        if kind=='action':box.currentTextChanged.connect(sync_height)
         head=Q.QWidget();head_row=Q.QHBoxLayout(head);head_row.setContentsMargins(2,0,2,0)
         enable=Q.QCheckBox('设置');angle=Q.QDoubleSpinBox();angle.setRange(-30,45);angle.setDecimals(1);angle.setSuffix('°')
         enable.setChecked(p.get('head_pitch_deg') is not None);angle.setValue(p.get('head_pitch_deg') or 0)
         # Editing is always available; a user edit opts this field into the step.
-        height.setToolTip('直接输入高度会启用正向下蹲；需要反向时选择“反向下蹲”。选择“保持当前”则不调身体。')
+        if direction.currentData()!='recorded':height.setToolTip('直接输入高度会启用正向下蹲；沿用动作记录时，完整回放记录中的高度变化。')
         height.valueChanged.connect(lambda _:direction.setCurrentIndex(direction.findData('forward')) if direction.currentData()=='keep' else None)
         angle.setToolTip('直接修改角度会自动勾选“设置”；取消勾选则保持当前头部角度。')
         angle.valueChanged.connect(lambda _:enable.setChecked(True))
@@ -193,9 +206,10 @@ class Workflow(C.QObject):
         o=self.owner
         try:
             if not self.retry_available:raise ValueError('没有已停止的步骤可重试')
-            if (not o.ready or o.busy or o.motion or o.cancel_pending or o.demo_active or o.placement_active
+            if (o.busy or o.motion or o.cancel_pending or o.demo_active or o.placement_active
                     or o.navigation.inflight or o.studio.moving() or self.base.moving()):
                 raise ValueError('请等待前一次操作完全停止、后台就绪后再重试')
+            require_perception(o, {'steps':self.cursor.record['steps'][self.cursor.index:]})
             row=self.cursor.step;kind=row['kind'];scan_only=False
             if kind=='navigate':
                 data=o.navigation.data
@@ -212,7 +226,7 @@ class Workflow(C.QObject):
                 from .placement_request import held_grasp
                 held_grasp(o.run)
                 detail='重新识别桌面并规划放置；请确认物品仍夹稳、未在上次操作中放下。'
-            elif kind=='action':detail='从该固定动作的第一帧重新执行，不重复之前的导航或抓取。请确认当前姿态和现场适合重做。'
+            elif kind=='action':detail='从该示教动作的第一帧重新执行，不重复之前的导航或抓取。请确认当前姿态和现场适合重做。'
             elif kind=='base':detail='将从当前位置重新执行本步骤全部底盘动作，已经走过的部分也会重做。请确认当前位置适合重新执行；否则先修改流程。'
             else:detail='从当前位置重新规划到该航点，不重复之前已完成的步骤。'
             if Q.QMessageBox.question(o,'重试当前步骤',
@@ -240,9 +254,10 @@ class Workflow(C.QObject):
         o = self.owner
         auto=getattr(o,'automatic',None)
         if auto and auto.active and not (confirmed and auto.launching): raise ValueError('自动任务正在运行')
-        if o.cancel_pending or not o.ready: raise ValueError('后台未就绪或正在停止')
+        if o.cancel_pending: raise ValueError('正在停止，请等待完成')
         if self.active or o.busy or o.motion or o.demo_active or o.placement_active or o.navigation.inflight or self.base.moving() or o.studio.moving(): raise ValueError('当前操作未结束')
-        record = validate(record); actions = deepcopy(actions_snapshot) if actions_snapshot is not None else o.studio.records()
+        record = validate(record); require_perception(o, record)
+        actions = deepcopy(actions_snapshot) if actions_snapshot is not None else o.studio.records()
         from .action_studio import full_record
         self.actions = {}
         for row in record['steps']:
@@ -261,7 +276,7 @@ class Workflow(C.QObject):
         from .base_sequence import summary
         text+=''.join('\n底盘：'+summary(r['base']) for r in record['steps'] if r['kind']=='base')
         grasp_mode='已勾选自动执行抓取，规划通过后立即抓取，无需逐次确认。' if o.auto_grasp.isChecked() else '抓取先预览再确认。'
-        if not confirmed and Q.QMessageBox.question(o, '确认任务流程', text+'\n\n将自动执行导航、放置和固定动作（包括腰腿与夹爪）。每次抓取前会复位并张开夹爪，请确认此时夹爪空载；'+grasp_mode+'\n固定动作没有门阻力检测，请确认现场与示教时一致、全程看护并准备实体急停。', defaultButton=Q.QMessageBox.No) != Q.QMessageBox.Yes: return
+        if not confirmed and Q.QMessageBox.question(o, '确认任务流程', text+'\n\n将自动执行导航、放置和示教动作（包括腰腿与夹爪）。每次抓取前会复位并张开夹爪，请确认此时夹爪空载；'+grasp_mode+'\n示教动作没有门阻力检测，请确认现场与示教时一致、全程看护并准备实体急停。', defaultButton=Q.QMessageBox.No) != Q.QMessageBox.Yes: return
         o.studio.release(); o.demo.setChecked(False); self.cursor = Cursor(record); self.map = data.get('active_map');self.failed_phase=''
         (o.run/'stop').unlink(missing_ok=True)
         atomic_json(o.run/'task_flow.json', dict(run_id=self.cursor.run_id, map=self.map,
@@ -276,6 +291,7 @@ class Workflow(C.QObject):
         self.posture_resume=None;self.nav_arrived=False;self.nav_posture_done=not bool(row.get('posture'));self.nav_posture_started=False
         o.flow_label.setText(f'任务 {self.cursor.index+1}/{len(self.cursor.record["steps"])} · {KINDS[row["kind"]]} · {row["target"]}')
         try:
+            require_perception(o, {'steps':[row]})
             o.studio.release()
             if row['kind']=='base':
                 if not row['base']['enabled']:self.advance();return
@@ -300,7 +316,10 @@ class Workflow(C.QObject):
                 self.adjust_posture(self.start_fixed_action)
             elif row['kind']=='grasp':
                 if (o.run/'held_object.json').exists(): raise ValueError('仍有持物记录；先放置或执行已确认的释放动作，不能自动张爪复位')
-                self.phase='prepare'; o.send('auto_prepare' if getattr(o,'automatic',None) and o.automatic.active else 'prepare')
+                from .grasp_start import requires_reset
+                if requires_reset(o.root):
+                    self.phase='prepare'; o.send('auto_prepare' if getattr(o,'automatic',None) and o.automatic.active else 'prepare')
+                else:self.adjust_posture(self.start_scan)
             else:
                 self.adjust_posture(self.start_place)
             o.controls()
@@ -317,7 +336,8 @@ class Workflow(C.QObject):
 
     def adjust_posture(self,resume):
         if defer_call(self.owner,self.adjust_posture,resume):return
-        if not self.cursor.step.get('posture'):resume();return
+        from .step_posture import targets
+        if not targets(self.cursor.step.get('posture')):resume();return
         self.posture_resume=resume
         if self.phase!='navigate':self.phase='posture'
         self.owner.flow_label.setText('任务调姿中 · 保持手臂与夹爪；导航步骤会同时行驶')
@@ -360,7 +380,10 @@ class Workflow(C.QObject):
     def plan_next_candidate(self):
         if getattr(self.owner,'automatic',None) and defer_call(self.owner,self.plan_next_candidate):return
         if not self.active or self.candidate_index>=len(self.candidates):
-            raise ValueError('同类候选均未通过规划检查：'+'；'.join(self.candidate_failures))
+            reason='；'.join(self.candidate_failures) or '没有可用识别目标'
+            atomic_json(self.owner.run/'task_candidate_selection.json',dict(token=self.cursor.token,
+                candidates=self.candidates,selected=None,failures=self.candidate_failures))
+            raise ValueError('当前物品无法抓取：'+reason)
         o=self.owner;instance=self.candidates[self.candidate_index];self.candidate_index+=1
         o.list.setCurrentRow(next(i for i,v in enumerate(o.items) if v['id']==instance))
         self.phase='plan';o.send('plan',id=instance)
@@ -398,7 +421,8 @@ class Workflow(C.QObject):
         if not self.active: return
         o=self.owner; kind=data.get('event')
         try:
-            if kind in ('error','fatal'):
+            if kind in ('error','fatal','vision_unavailable'):
+                if not uses_perception(self.cursor.record):return
                 if kind=='error' and self.phase=='plan' and data.get('candidate_unavailable'):
                     self.candidate_failures.append(f'#{self.candidates[self.candidate_index-1]}: '+data['text'])
                     self.plan_next_candidate();return

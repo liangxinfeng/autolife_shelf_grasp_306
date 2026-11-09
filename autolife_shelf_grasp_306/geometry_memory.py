@@ -30,7 +30,7 @@ class GeometryMemory:
         except (OSError,ValueError,TypeError):return []
 
     def remember(self,item,product,geometry,now=None):
-        if geometry.get('image_cropped') or not product.get('temporary') or product.get('dimension_frames',0)<5:return
+        if geometry.get('image_cropped') or product.get('partial_geometry') or not product.get('temporary') or product.get('dimension_frames',0)<5:return
         now=time.time() if now is None else now
         feature=unit(item['feature']);label=str(item.get('semantic_label','')).strip().lower()
         if not label:return

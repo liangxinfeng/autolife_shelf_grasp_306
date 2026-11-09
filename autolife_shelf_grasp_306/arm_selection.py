@@ -39,7 +39,17 @@ def tool_geometry(cfg,calibration,fk,arm):
     their URDF mounting frames. This is explicitly provisional, not a measured
     right-hand calibration. Robot and URDF identity are still validated.
     """
-    from autolife_handeye_calibration_306.verification_core import load_geometry,wrist_frame
+    from .grasp_geometry import load_geometry,is_nominal
+    from autolife_handeye_calibration_306.verification_core import wrist_frame
+    if is_nominal(calibration):
+        from .pose_geometry import ModelGeometry
+        arm=arm_name(arm);result=copy.deepcopy(cfg);result['arm']=arm
+        tool=ModelGeometry(cfg['urdf_path']).tool_transform(arm)
+        result['T_wrist_tool_quat_xyzw']=Rotation.from_matrix(tool[:3,:3]).as_quat().tolist()
+        result['tool_geometry']={'arm':arm,'source_arm':arm,'provisional':True,
+            'method':'urdf_nominal_tcp','camera_source':'urdf',
+            'tcp_m':tool[:3,3].tolist(),'independent_tool_calibration':False}
+        return result,tool[:3,3].copy()
     arm=arm_name(arm);source=arm_name(calibration.get('config',{}).get('arm','left'))
     tcp=np.asarray(load_geometry(calibration,fk,cfg['tcp_offset_mm'],robot_id=cfg.get('robot_id')),float)
     result=copy.deepcopy(cfg);result['arm']=arm
@@ -81,8 +91,12 @@ def rank_arms(fk,point,preferred='left'):
 class ArmPlannerPool:
     def __init__(self,cfg,calibration,fk,factory,calibration_profiles=None):
         self.base=copy.deepcopy(cfg);self.calibration=calibration;self.fk=fk;self.factory=factory
-        self.planners={};self.attempts=[];self.diagnostics=[]
+        self.planners={};self.attempts=[];self.diagnostics=[];self.native_planners={}
         self.calibration_profiles=calibration_profiles
+
+    def close(self):
+        for _,planner in self.native_planners.values():planner.close()
+        self.native_planners.clear()
 
     def for_config(self,cfg):
         side=arm_name(cfg['arm'])
@@ -96,6 +110,8 @@ class ArmPlannerPool:
         profiles=(checked_profiles(current_cfg['target_offsets_by_arm_torso_mm'])
                   if 'target_offsets_by_arm_torso_mm' in current_cfg else None)
         self.attempts=[];self.diagnostics=[]
+        from .planning_control import PlanningControl
+        context=PlanningControl(stopped,on_status) if self.base.get('grasp_backend')=='vendor_ik_trajectory' else None
         order=rank_arms(self.fk,point,self.base.get('arm','left')) if self.base.get('auto_arm_selection',True) else [self.base['arm']]
         for side in order:
             if stopped():raise ValueError('用户停止')
@@ -104,9 +120,16 @@ class ArmPlannerPool:
             profile_cfg,profile_data=(self.base,self.calibration)
             if self.calibration_profiles is not None:
                 profile_cfg,profile_data,_=self.calibration_profiles.for_arm(side)
+            # 标定快照只提供几何信息，不能把启动时的旧复位目标带回来。
+            # 同时删除已取消的引用，避免沿用上一次规划的保存姿态。
+            profile_cfg=copy.deepcopy(profile_cfg)
+            for key in ('initial_pose_deg','workspace_reset_joints','workspace_reset_path',
+                        'workspace_reset_sha256','workspace_pose_speed_percent','grasp_speed_percent'):
+                profile_cfg.pop(key,None)
+                if key in current_cfg:profile_cfg[key]=copy.deepcopy(current_cfg[key])
             config,tcp=tool_geometry(profile_cfg,profile_data,self.fk,side)
             if self.calibration_profiles is not None:
-                config['tool_geometry'].update(camera_source='arm_calibration_profile',
+                config['tool_geometry'].update(camera_source=config['tool_geometry'].get('camera_source','arm_calibration_profile'),
                     calibration_profile=config['calibration_profile'])
             if profiles is not None:
                 config['target_offset_torso_mm']=list(profiles[side])
@@ -114,7 +137,18 @@ class ArmPlannerPool:
             config['up_torso']=list(current_cfg['up_torso'])
             if 'semantic_prompt_overrides' in current_cfg:
                 config['semantic_prompt_overrides']=copy.deepcopy(current_cfg['semantic_prompt_overrides'])
-            planner=self.for_config(config)
+            if config.get('grasp_backend') == 'vendor_ik_trajectory':
+                from .vendor_grasp_planning import VendorGraspPlanner
+                from .planner_cache import cache_key
+                key=cache_key(config);cached=self.native_planners.get(side)
+                if cached is None or cached[0]!=key:
+                    if cached:cached[1].close()
+                    planner=VendorGraspPlanner(config,context=context)
+                    self.native_planners[side]=(key,planner)
+                else:
+                    planner=cached[1];planner.cfg=copy.deepcopy(config);planner.context=context
+            else:
+                planner=self.for_config(config)
             try:
                 arm_point,arm_product=(observation_for_arm(side,config) if observation_for_arm else (point,product))
                 center,correction=corrected_target(arm_point,config.get('target_offset_torso_mm',[0.,0.,0.]))

@@ -19,7 +19,7 @@ def test_hold_freezes_clocks_targets_frame_and_preserves_grip(tmp_path):
         _publish_vendor=lambda pub,msg:logs.append((pub,msg)),_lock=locks.append,
         _active_goals={'arm':dict(commands=dict(q),targets=dict(q))},
         _action_state=dict(frame_started=99.,frame_deadline=110.,last_progress_at=99.,hold_started=99.,
-                           commanded_values=dict(q),frame_index=3),progress_watch={'arm':(99.,dict(q))})
+                           commanded_values=dict(q),frame_index=3,jaw_steady_since=99.,jaw_arrival_gate={'start':98.}),progress_watch={'arm':(99.,dict(q))})
     gate=BridgePause(node,tmp_path,lambda:now[0]);target=deepcopy(node._active_goals)
     (tmp_path/'task_pause').touch();assert gate.tick();assert len(logs)==2
     assert logs[1][1]['left_gripper_target_joints_position']==[180]
@@ -28,6 +28,7 @@ def test_hold_freezes_clocks_targets_frame_and_preserves_grip(tmp_path):
     (tmp_path/'task_pause').unlink();assert not gate.tick()
     assert gate.now()==100. and node._action_state['frame_started']==299.
     assert node._action_state['frame_deadline']==310. and gate.generation==1
+    assert node._action_state['jaw_steady_since']==299. and node._action_state['jaw_arrival_gate']['start']==298.
     assert node.progress_watch['arm'][0]==300 and not locks
 
 
@@ -183,7 +184,7 @@ def test_portrait_window_rotation_and_return_desktop(window,qt):
 @pytest.mark.parametrize('outcome',[None,('test',False,'暂停保持失败')])
 def test_paused_action_fault_is_reported_immediately(window,outcome):
     from types import SimpleNamespace
-    w=window;s=w.studio
+    w=window;s=w.studio.engine
     (w.run/'task_pause').touch()
     s.bridge=SimpleNamespace(outcome=outcome,_hardware_enabled=False,_hardware_ready=False,
         task_pause=SimpleNamespace(started=0.),_is_feedback_fresh=lambda:True)

@@ -98,7 +98,9 @@ def test_candidate_exhaustion_stops_current_node(window):
     for _ in range(2):
         w.receive_event(dict(event='error',request_id=w.request,text='无解',candidate_unavailable=True))
     assert not w.workflow.active and w.workflow.cursor.index==0
-    assert '同类候选均未通过' in w.workflow.cursor.reason
+    assert '当前物品无法抓取' in w.workflow.cursor.reason
+    assert '#1: 无解' in w.workflow.cursor.reason and '#2: 无解' in w.workflow.cursor.reason
+    assert len(json.loads((w.run/'task_candidate_selection.json').read_text())['failures'])==2
 
 
 @pytest.mark.parametrize('workflow',[False,True])

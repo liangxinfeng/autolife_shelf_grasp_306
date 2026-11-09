@@ -1,8 +1,8 @@
 """Start the existing navigation stack once; never launch a second planner.
 
-The stack deliberately survives this GUI closing, like a shared service. Only
-the GUI's own goal is cancelled by navigation_bridge on exit. Control-center
-process records make the backend discoverable to its existing service manager.
+A backend launched here has its own UI+bridge watchdog and closes on owner
+loss. A pre-existing control-center backend keeps its original owner/lifecycle.
+Control-center process records make it discoverable to the service manager.
 """
 import fcntl
 import os
@@ -63,7 +63,9 @@ class NavigationRuntime:
                 with (self.run/'navigation_backend.log').open('ab',buffering=0) as stream:
                     process=subprocess.Popen(['/usr/bin/python3','/opt/ros/jazzy/bin/ros2','launch',
                         'control_center_navigation','bringup_all.launch.py','open_navigation_ui:=false',
-                        'text_voice_robot_id:=306','text_voice_ros_domain_id:=0','map_yaml:='+map_path],
+                        'text_voice_robot_id:=345','text_voice_ros_domain_id:=0','map_yaml:='+map_path,
+                        'operator_heartbeat_topic:=/grasp306/operator_heartbeat/'+self.run.name,
+                        'operator_liveness_run:='+str(self.run)],
                         stdin=subprocess.DEVNULL,stdout=stream,stderr=subprocess.STDOUT,start_new_session=True)
                 time.sleep(.3)
                 if process.poll() is not None:raise ValueError('导航启动退出，请查看 navigation_backend.log')

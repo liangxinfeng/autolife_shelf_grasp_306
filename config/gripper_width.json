@@ -1,0 +1,44 @@
+{
+  "robot_id": 345,
+  "hardware": "dm_type1",
+  "measured": true,
+  "measured_date": "2026-11-02",
+  "width_definition": "empty gripper inner clear opening in millimeters",
+  "position_basis": "commanded_vendor_position",
+  "feedback_positions_recorded": false,
+  "provenance": "User corrected both maximum openings on 2026-11-06: command10 -> 90mm. Earlier measured 180 ->45mm and330 ->5mm retained; interpolated widths are estimates.",
+  "arms": {
+    "left": [
+      [
+        5,
+        330
+      ],
+      [
+        45,
+        180
+      ],
+      [
+        90,
+        10
+      ]
+    ],
+    "right": [
+      [
+        5,
+        330
+      ],
+      [
+        45,
+        180
+      ],
+      [
+        90,
+        10
+      ]
+    ]
+  },
+  "max_opening_correction": {
+    "date": "2026-11-06",
+    "source": "用户更正：左右最大净开口90mm，之前95mm口述有误；中间45mm、近闭合5mm未重新测量，保持原记录。"
+  }
+}

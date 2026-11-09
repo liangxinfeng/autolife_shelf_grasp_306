@@ -16,6 +16,7 @@ def selected_frame_action(record,row):
     record=full_record(record)
     if not 0<=row<len(record['keyframes']):raise ValueError('请先选中一个关键帧')
     result=deepcopy(record);result['keyframes']=[deepcopy(record['keyframes'][row])]
+    result.pop('trajectory',None)
     result['loop_count']=1;result['keyframes'][0]['hold_sec']=0.
     return result
 
@@ -52,7 +53,9 @@ def entry_gripper_hold(record,current):
         # This robot uses 10deg open / 330deg closed. A deliberate first-frame
         # opening must remain intact; only suppress additional closing.
         if result['keyframes'][0]['joints_deg'][n]>=value:
-            result['keyframes'][0]['joints_deg'][n]=min(hi,max(lo,value))
+            if 'trajectory' in result:
+                result['trajectory'].setdefault('entry_gripper_hold',{})[n]=min(hi,max(lo,value))
+            else:result['keyframes'][0]['joints_deg'][n]=min(hi,max(lo,value))
     return full_record(result)
 
 
@@ -152,13 +155,13 @@ def make_panel(node):
     return panel
 
 
-class ActionStudio(Q.QWidget):
+class ActionExecutor(Q.QWidget):
     """Lazy ROS/UI lifetime, exclusive vendor bridge, exact completion receipt."""
     completed = C.pyqtSignal(str, bool, str)
 
     def __init__(self, owner):
         super().__init__(); self.owner = owner; self.bridge = None; self.panel = None
-        self.node = None; self.job = None; self._ros = False
+        self.node = None; self.job = None; self._ros = False; self.sync_session = None; self.sync_exit_ok = True
         self.library = owner.root / 'data' / 'fixed_actions'
         self.layout_ = Q.QVBoxLayout(self)
         self.note = Q.QLabel('模型编辑与模拟不驱动真机。固定轨迹只适用于已示教的相对位置；不能感知门阻力或环境变化。')
@@ -192,89 +195,8 @@ class ActionStudio(Q.QWidget):
                 else: os.environ[key] = previous
             self.panel.setWindowFlags(C.Qt.Widget); self.layout_.addWidget(self.panel)
         if self.bridge is None:
-            class ReceiptBridge(JointBridge):
-                outcome = None
-                def _advance_motion(inner):
-                    if getattr(inner,'task_pause',None) and inner.task_pause.tick():return
-                    super()._advance_motion()
-                def _record_action_event(inner,kind,reason=''):
-                    # Editor playback and task-flow playback share this bridge.
-                    # Persist evidence before cancellation clears action state.
-                    state=inner._action_state
-                    if not state:return
-                    try:
-                        frame=state['record']['keyframes'][state['frame_index']]
-                        entry=dict(time=time.time(),event=kind,reason=str(reason),name=state['name'],
-                            frame_index=state['frame_index']+1,loop_index=state['loop_index'],
-                            targets=frame['joints_deg'],measured=dict(inner._current),
-                            commanded=dict(state['commanded_values']),details=dict(inner._details),
-                            feedback_age_sec=time.monotonic()-inner._feedback_monotonic)
-                        from .core import atomic_json
-                        with (self.owner.run/'action_events.jsonl').open('a',encoding='utf-8') as stream:
-                            stream.write(json.dumps(entry,ensure_ascii=False)+'\n')
-                        if kind in ('stopped','locked'):atomic_json(self.owner.run/'last_action_error.json',entry)
-                    except (OSError,ValueError,KeyError,TypeError,AttributeError):pass
-                def _action_target_reached(inner,targets):
-                    if super()._action_target_reached(targets):
-                        from .action_arrival import remember_opening_arrival
-                        remember_opening_arrival(inner,targets)
-                        if inner._action_state:
-                            inner._action_state.pop('opening_arrival',None)
-                            inner._action_state.pop('arm_arrival',None)
-                        return True
-                    from .action_arrival import settled_opening_arrival
-                    if settled_opening_arrival(inner,targets):
-                        inner._record_action_event('settled_opening','松开或保持已确认松开状态，夹爪残差≤5°并稳定0.5秒')
-                        inner._event('松爪/保持松开已稳定，小于5°残差继续下一帧；身体与手臂容差不变')
-                        return True
-                    from .action_pose_arrival import settled_arm_arrival,PoseEnvelope
-                    def geometry(actual,target):
-                        if not hasattr(inner,'_arrival_envelope'):
-                            import yaml
-                            cfg=yaml.safe_load((self.owner.root/'config/grasp.yaml').read_text('utf-8'))
-                            inner._arrival_envelope=PoseEnvelope(cfg['urdf_path'])
-                        return inner._arrival_envelope.check(actual,target)
-                    receipt=settled_arm_arrival(inner,targets,geometry)
-                    if receipt is None:return False
-                    # Only already stationary arms are held at their measured
-                    # position. Do not change jaws, waist/legs, neck or records.
-                    from control_center_joint_control.joint_definitions import GROUPS,group_joint_names
-                    affected={side+'_arm' for side in ('left','right') if any(
-                        n.startswith('Joint_'+side.title()+'_') for n in receipt['errors_deg'])}
-                    state=inner._action_state
-                    payload={}
-                    for group in ('neck','left_arm','right_arm','leg_waist'):
-                        names=group_joint_names(group)
-                        values=[float(inner._current[n]) if group in affected else
-                                float(state['commanded_values'][n] if n in state['commanded_values'] else
-                                      inner._controller_target[n]) for n in names]
-                        payload[GROUPS[group]['command_key']]=values
-                        if group in affected:state['commanded_values'].update(zip(names,values))
-                    inner._publish_vendor(inner._whole_body_pub,payload)
-                    state.setdefault('arrival_deviations',[]).append(receipt)
-                    inner._record_action_event('settled_arm_tolerance',json.dumps(receipt,ensure_ascii=False))
-                    inner._event('手臂小偏差已停稳并通过5mm运动学包络检查，从实测姿态衔接；未跳过关键帧')
-                    return True
-                def _action_error_summary(inner,frame):
-                    errors=sorted(((abs(float(inner._current[n])-float(v)),n,float(v))
-                        for n,v in frame['joints_deg'].items()),reverse=True)[:3]
-                    return '；'.join(f'{n} 实测{inner._current[n]:.3f}°/目标{v:.3f}°/偏差{e:.3f}°'
-                                    for e,n,v in errors)
-                def _advance_action_frame(inner, now):
-                    inner._record_action_event('frame_completed')
-                    name = inner._action_state['name']
-                    deviations=len(inner._action_state.get('arrival_deviations',[]))
-                    super()._advance_action_frame(now)
-                    if inner._action_state is None:
-                        inner.outcome = (name, True, f'动作完成（{deviations}帧以验证后的小偏差衔接）' if deviations else '动作完成')
-                def _cancel_action(inner, reason):
-                    inner._record_action_event('stopped',reason)
-                    if inner._action_state: inner.outcome = (inner._action_state['name'], False, reason)
-                    super()._cancel_action(reason)
-                def _lock(inner, reason):
-                    inner._record_action_event('locked',reason)
-                    if inner._action_state: inner.outcome = (inner._action_state['name'], False, reason)
-                    super()._lock(reason)
+            from .pose_execution_bridge import make_bridge
+            ReceiptBridge=make_bridge(JointBridge,self)
             self.bridge = ReceiptBridge()
             from .task_pause import BridgePause
             self.bridge.task_pause=BridgePause(self.bridge,self.owner.run)
@@ -293,6 +215,8 @@ class ActionStudio(Q.QWidget):
         if self.moving(): raise ValueError('动作仍在进行，请先停止并等待停稳再切换页面')
         if self.bridge and self.bridge._hardware_enabled and not self.settled():
             raise ValueError('关节尚未停稳，请稍后切换')
+        self.manual_session=False
+        self._close_sync()
         if self.panel:
             self.panel.stop_action_preview(quiet=True); self.panel.preview_timer.stop()
             self.panel._pending_live_groups.clear(); self.panel._pending_live_joint_names.clear()
@@ -312,6 +236,7 @@ class ActionStudio(Q.QWidget):
             abs(float(b._details.get(n, {}).get('speed', float('inf')))) <= 2. for n in BODY_JOINTS))
 
     def execute(self, token, record, *, preserve_grippers_at_entry=False):
+        if getattr(self,'manual_session',False):self.release()
         record = full_record(record); b = self.ensure()
         if self.moving(): raise ValueError('关节编辑动作未结束')
         self.panel.setEnabled(False)
@@ -336,7 +261,24 @@ class ActionStudio(Q.QWidget):
         self.panel.setEnabled(False);b.outcome=None
         self.job=dict(token=token,prepare_only=True,phase='feedback',started=time.monotonic())
 
+    def _close_sync(self):
+        if self.bridge:self.bridge.teaching_sync_verified=False
+        session=self.sync_session
+        if session is None:return
+        self.sync_session=None
+        try:
+            ok=session.close()
+        except Exception as exc:
+            ok=False
+            if self.bridge:self.bridge._event('轨迹SYNC退出异常：'+str(exc),'error')
+        self.sync_exit_ok=bool(ok)
+        if not ok:
+            self.note.setText('SYNC退出未确认，已停止动作并停止会话心跳；请保持停用并检查原厂服务。')
+            from .core import atomic_json
+            atomic_json(self.owner.run/'sync_exit_error.json',dict(time=time.time(),reason='SYNC退出未确认，执行器已停止'))
+
     def stop(self):
+        self.manual_session=False
         self.job = None
         if self.bridge:
             if getattr(self.bridge,'task_pause',None):self.bridge.task_pause.cancel()
@@ -351,6 +293,7 @@ class ActionStudio(Q.QWidget):
                     'left_gripper_target_joints_position': [self.bridge._current['Joint_Left_Gripper']],
                     'right_gripper_target_joints_position': [self.bridge._current['Joint_Right_Gripper']]})
             self.bridge._lock('动作停止，禁止继续下发')
+        self._close_sync()
         if self.panel: self.panel.setEnabled(True)
 
     def tick(self):
@@ -363,8 +306,15 @@ class ActionStudio(Q.QWidget):
         for _ in range(16):
             rclpy.spin_once(self.bridge, timeout_sec=0.)
             if time.monotonic()>=deadline:break
-        if not self.job: return
+        if not self.job:
+            from .pose_manual_session import keep_idle
+            keep_idle(self)
+            return
         j = self.job; b = self.bridge
+        try:
+            if self.sync_session is not None:self.sync_session.tick()
+        except Exception as exc:
+            token=j['token'];self.stop();self.release();self.completed.emit(token,False,str(exc));return
         now=time.monotonic();last=j.get('pause_tick',now);j['pause_tick']=now
         if (self.owner.run/'task_pause').exists():
             failed=b.outcome and b.outcome[0]==j['token'] and not b.outcome[1]
@@ -375,6 +325,10 @@ class ActionStudio(Q.QWidget):
             j['started']+=now-last
             if j.get('stable') is not None:j['stable']+=now-last
             return
+        if j.get('manual'):
+            from .pose_workspace_motion import advance
+            advance(self)
+            return
         try:
             if time.monotonic()-j['started'] > (300 if j['phase']=='posture' else 60 if j['phase'] != 'running' else 3600):
                 raise ValueError('动作准备/执行超时')
@@ -382,12 +336,34 @@ class ActionStudio(Q.QWidget):
             from std_msgs.msg import String
             if j['phase'] == 'feedback':
                 if not b._is_feedback_fresh(): return
+                if 'trajectory' in j.get('record',{}):
+                    if 'plan_future' not in j:
+                        from concurrent.futures import ThreadPoolExecutor
+                        from .teaching_trajectory import plan
+                        if not hasattr(self,'plan_pool'):self.plan_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='teaching-plan')
+                        entry=dict(b._current);record=deepcopy(j['record'])
+                        if j.get('preserve_grippers_at_entry'):record=entry_gripper_hold(record,entry)
+                        j['plan_entry']=entry
+                        j['plan_future']=self.plan_pool.submit(plan,record,entry,self.owner.root/'data/fixed_actions')
+                        return
+                    if not j['plan_future'].done():return
+                    j['prepared']=j['plan_future'].result()
+                    if any(abs(b._current[n]-v)>1. for n,v in j['plan_entry'].items()):
+                        raise ValueError('轨迹准备期间机器人姿态发生变化，请停稳后重试')
                 response = b._set_hardware_enabled_without_reset(SetBool.Request(data=True), SetBool.Response())
                 if not response.success: raise ValueError(response.message)
                 j['phase'] = 'enable'
-            elif j['phase'] == 'enable':
+            elif j['phase'] in ('enable','sync'):
                 if not b._hardware_enabled: raise ValueError(b._last_event)
                 if not b._hardware_ready: return
+                if 'record' in j:
+                    if j['phase']=='enable':
+                        from .teaching_sync import TeachingSyncSession
+                        self.sync_exit_ok=True;self.sync_session=TeachingSyncSession(b);self.sync_session.begin()
+                        j['phase']='sync';b._event('正在取得与VR遥操相同的位置SYNC会话，尚未播放动作');return
+                    if not self.sync_session.poll():return
+                    b.teaching_sync_verified=True
+                    b._event('位置SYNC已就绪，原姿态稳定，开始动作准备')
                 if j.get('prepare_only'):
                     if not b._is_feedback_fresh() or not self.settled():return
                     self.job=None
@@ -411,9 +387,15 @@ class ActionStudio(Q.QWidget):
                     if not b._hardware_ready or any(g not in b._active_goals for g in groups):raise ValueError('调姿目标未被控制器接收：'+b._last_event)
                     j.update(phase='posture',started=time.monotonic(),stable=None)
                     return
-                if j.get('preserve_grippers_at_entry'):
+                if j.get('preserve_grippers_at_entry') and not j.get('prepared'):
                     j['record']=entry_gripper_hold(j['record'],b._current)
                     b._event('抓取动作接续：首帧保持当前持物开度；后续帧按示教开合')
+                if j.get('prepared'):
+                    j['record'],segments,self.teaching_phases=j.pop('prepared')
+                else:
+                    from .teaching_trajectory import plan
+                    j['record'],segments,self.teaching_phases=plan(j['record'],b._current,self.owner.root/'data/fixed_actions')
+                b.teaching_segments=segments
                 b._on_action_command(String(data=json.dumps(dict(command='start', name=j['token'], action=j['record']))))
                 if not b._action_state: raise ValueError(b._last_event)
                 j['phase'] = 'running'; j['started'] = time.monotonic()
@@ -428,6 +410,7 @@ class ActionStudio(Q.QWidget):
                 if b.outcome and b.outcome[0] == j['token']:
                     _, ok, text = b.outcome
                     if not ok: raise ValueError(text)
+                    j['recorded_gripper_unverified']=any(s.get('recorded_timing') for s in b.teaching_segments)
                     j.update(phase='settle', started=time.monotonic(), stable=None)
                 elif not b._hardware_ready or not b._is_feedback_fresh(): raise ValueError('动作反馈或控制权失效')
             elif j['phase'] == 'settle':
@@ -436,12 +419,17 @@ class ActionStudio(Q.QWidget):
                 elif j['stable'] is None: j['stable'] = time.monotonic()
                 elif time.monotonic()-j['stable'] >= .3:
                     self.job = None; self.panel.setEnabled(True); self.release()
-                    self.completed.emit(j['token'], True, '动作已完成并停稳')
+                    self.completed.emit(j['token'], self.sync_exit_ok,
+                        (('录制动作已播放完成并停稳，SYNC已退出；夹爪到位未核验' if j.get('recorded_gripper_unverified') else '动作已完成并停稳，SYNC已退出') if self.sync_exit_ok else '动作已停住，但SYNC退出未确认，请检查原厂服务'))
                 if self.job and time.monotonic()-j['started'] > 15: raise ValueError('动作结束后未确认停稳')
         except Exception as exc:
             token = j['token']; self.stop(); self.release(); self.completed.emit(token, False, str(exc))
 
     def shutdown(self):
+        if hasattr(self,'plan_pool'):self.plan_pool.shutdown(wait=False,cancel_futures=True)
         self.stop(); self.release(); self.timer.stop()
         if self.panel: self.panel.spin_timer.stop()
         if self.node: self.node.destroy_node(); self.node = None
+
+
+from .teaching_studio import TeachingStudio as ActionStudio

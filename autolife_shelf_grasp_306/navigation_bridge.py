@@ -165,9 +165,9 @@ def main():
     node.create_subscription(PoseWithCovarianceStamped,'/amcl_pose',amcl_pose,qos)
     node.create_subscription(OccupancyGrid,'/map',map_received,QoSProfile(depth=1,durability=DurabilityPolicy.TRANSIENT_LOCAL))
     node.create_subscription(Costmap,'/global_costmap/costmap_raw',obstacle_received,QoSProfile(depth=1,durability=DurabilityPolicy.TRANSIENT_LOCAL))
-    node.create_subscription(Odometry,'/topic_gv_wheel_odom_0_306',odometry,qos_profile_sensor_data)
-    node.create_subscription(Bool,'/robot_navigation_0_306/is_navigating',vendor,10)
-    node.create_subscription(String,'/topic_arm_whole_body_and_gripper_current_joints_status_0_306',joints,qos_profile_sensor_data)
+    node.create_subscription(Odometry,'/topic_gv_wheel_odom_0_345',odometry,qos_profile_sensor_data)
+    node.create_subscription(Bool,'/robot_navigation_0_345/is_navigating',vendor,10)
+    node.create_subscription(String,'/topic_arm_whole_body_and_gripper_current_joints_status_0_345',joints,qos_profile_sensor_data)
     for topic in ('/navigate_to_pose/_action/status','/navigate_through_poses/_action/status','/dock_robot/_action/status'):
         node.create_subscription(GoalStatusArray,topic,lambda m,k=topic:actions.update({k:any(s.status in (1,2,3) for s in m.status_list)}),qos)
     def call(kind,request):
@@ -192,6 +192,7 @@ def main():
     try:
         while running and rclpy.ok():
             rclpy.spin_once(node,timeout_sec=.025);now=time.monotonic()
+            (run/'navigation_bridge_heartbeat').touch()
             if not (run/'heartbeat').exists() or time.time()-(run/'heartbeat').stat().st_mtime>1.5:
                 stopping=True
                 if goal:cancel_reason='抓取界面心跳中断，已请求取消本次导航'

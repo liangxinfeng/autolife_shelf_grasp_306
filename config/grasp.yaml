@@ -1,63 +1,91 @@
-robot_id: 306
+# 345正反下蹲统一模型：仅模型膝轴为-Y，与控制中心一致；电机角度不变。
+# 最大净开口左右均90mm（用户2026-11-06更正）；开合映射在本包config内。
+# 几何来源：urdf=本机模型名义相机/TCP，不要求手眼文件；calibrated=显式使用手眼数据。
+# URDF模式仍保留已实测的DM夹爪开口映射，工具偏差可在左右手补偿面板调整。
+geometry_source: urdf
+robot_id: 345
 arm: left
-python: /home/ubuntu/miniconda3/envs/robot_env/bin/python
+python: /home/ubuntu/ros2_ws/venvs/s3_perception/bin/python
 vendor_python_path: /home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages
-urdf_path: /home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_sdk/descriptions/autolife_s1/urdfs/robot_v2_2.urdf
-calibration: /home/ubuntu/ros2_ws/src/autolife_handeye_calibration_306/sessions/20260915_135708_706046/session.json
-# Independent right-arm test result; left calibration above is unchanged.
-right_calibration: /home/ubuntu/ros2_ws/src/autolife_handeye_calibration_306/sessions/20261012_172415_700141/session.json
+urdf_path: /home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306/urdf/robot_v3_1.urdf
+calibration: /home/ubuntu/ros2_ws/calibration345/left/session.json
+right_calibration: /home/ubuntu/ros2_ws/calibration345/right/session.json
 detector_backend: grounded_sam2
 grounding_dino_model: models/grounding-dino-tiny
 sam2_model: models/sam2.1-hiera-tiny
 grounded_box_threshold: 0.35
-grounded_text_threshold: 0.20
-sam2_mask_quality: 0.50
+grounded_text_threshold: 0.2
+sam2_mask_quality: 0.5
 dino_repo: models/dinov2
 dino_weights: models/dinov2_vits14_pretrain.pth
 device: cuda:0
 image_size: 640
-confidence: 0.30
-# UI accepts known Chinese names and English phrases; product brands use DINOv2.
+confidence: 0.3
 grounded_sam2_prompts:
-  beverages: 'bottle. beverage can. cup.'
-  all: 'bottle. cup. can. bag. box. watermelon.'
+  beverages: bottle. beverage can. cup.
+  all: bottle. cup. can. bag. box. watermelon.
 recognition_hz: 3.0
 match_threshold: 0.72
 match_margin: 0.06
 depth_scale_m: 0.001
-depth_range_m: [0.20, 1.8]
-head_offsets_deg: [0.0, 0.0, 0.0]
+depth_range_m:
+- 0.2
+- 1.8
+head_offsets_deg:
+- 0.0
+- 0.0
+- 0.0
 tcp_offset_mm: 15.0
-# Link_Waist_Yaw_to_Shoulder_Inner: +Y is toward robot's RIGHT shoulder.
-# Previous +30mm plus user's additional -15mm = final +15mm to robot right.
-# Independent of head/camera/wrist orientation and the 15mm marker->TCP offset.
-target_offset_torso_mm: [0.0, 15.0, 0.0]
-# Mechanical tool orientation: tool X approaches; tool Y closes horizontally; Z up.
-T_wrist_tool_quat_xyzw: [-0.70710678, 0.0, 0.0, 0.70710678]
+target_offset_torso_mm:
+- 0.0
+- 0.0
+- 0.0
+T_wrist_tool_quat_xyzw:
+- -0.70710678
+- 0.0
+- 0.0
+- 0.70710678
 approach_yaw_deg: 0.0
 orientation_relax_deg: 30.0
 pregrasp_m: 0.12
 lift_m: 0.035
-withdraw_m: 0.20
+withdraw_m: 0.2
 fixed_carry_enabled: true
-# One continuous checked return to initial_pose_deg.left_arm, without opening jaws.
 carry_return_mode: continuous_reset
 carry_max_tilt_deg: 45.0
-# No support plane is estimated. Up is computed from current URDF kinematics.
-gripper_max_width_m: 0.095
+gripper_max_width_m: 0.09
+gripper_hardware: dm_type1
+gripper_width_calibration: /home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306/config/gripper_width.json
 gripper_open_deg: 10.0
 gripper_open_tolerance_deg: 4.0
 gripper_closed_deg: 330.0
-# Arms/neck from robot283_full_20260924 vendor system HOME (2026-09-22 saved pose).
-# Only reset targets are imported; retain 306 calibration, joint limits and speeds.
-# Both jaws fully open, as before.
-# Waist/legs stay at their measured pose. This is not a vendor full-body HOME.
 initial_pose_deg:
-  left_arm: [40.000651, 0.010986, 10.008402, 129.99937, -0.010928, 0.010928, -0.010928]
-  right_arm: [-40.000651, -0.010986, -9.98643, -129.99937, 0.032785, -0.010928, -0.010928]
-  neck: [0.010928, -29.998649, 0.010928]
-require_reset_before_grasp: true
+  left_arm:
+  - 20.0
+  - 0.0
+  - 0.0
+  - -110.0
+  - 0.0
+  - 0.0
+  - 0.0
+  right_arm:
+  - 20.0
+  - 0.0
+  - 0.0
+  - -110.0
+  - 0.0
+  - 0.0
+  - 0.0
+  neck:
+  - 0.0
+  - 0.0
+  - 0.0
+# false：以规划时的实时全身姿态为起点；复位按钮保留为手动操作，不再强制每轮复位。
+require_reset_before_grasp: false
 reset_hardware_enabled: true
+# 仅S3已验证模型：手动复位确认有人支撑后，先低速抬头至15°再恢复双臂。
+# 非该头颈姿态、其他碰撞或自动任务均不能跳过检查。
+supported_neck_recovery_enabled: true
 reset_joint_speed_deg_s: 70.2
 reset_joint_acceleration_deg_s2: 585.0
 reset_feedback_lead_deg: 5.0
@@ -66,16 +94,21 @@ gripper_speed_scale: 0.5
 max_joint_speed_deg_s: 120.0
 max_joint_acceleration_deg_s2: 720.0
 grasp_feedback_lead_deg: 3.0
-# Faster free-arm transit; close approach / placement retain the 3 degree bound.
 grasp_transit_feedback_lead_deg: 5.0
-# Reuse guarded VR position SYNC for grasp only; reset retains its current path.
 use_position_sync_session: true
 plan_ttl_sec: 20.0
-# No automatic hardware enable on startup. These remain false until measured.
 hardware_execution: true
-# User-authorized supervised experiment, NOT a claim of calibration acceptance.
 supervised_experiment: true
 camera_tcp_validated: false
 gripper_mapping_validated: false
 tool_orientation_validated: false
 external_scene_validated: false
+vendor_control_config: /home/ubuntu/miniconda3/envs/robot_env/lib/python3.12/site-packages/autolife_robot_arm/configs/autolife_s1/robot_v3_1.json
+
+# 自动视觉抓取采用原厂KDL逆解和原厂整段轨迹插值；复位/放置/录制动作不受影响。
+grasp_backend: vendor_ik_trajectory
+# 腰部相对识别时姿态的最大变化[俯仰,旋转]，单位度；膝踝固定，抓取后腰部回到起始角度；手臂回当前已保存姿态，夹爪保持。
+vendor_grasp_waist_range_deg: [12.0, 8.0]
+# 整段时间规划上限，单位度/秒；不是修改原厂电机增益，实际速度由驱动限幅。
+vendor_grasp_arm_speed_deg_s: 60.0
+vendor_grasp_waist_speed_deg_s: 20.0

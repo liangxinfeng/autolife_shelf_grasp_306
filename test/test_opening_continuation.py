@@ -59,11 +59,14 @@ def test_editor_error_saved_before_action_state_cleared(tmp_path):
         def _cancel_action(self,reason):self._action_state=None
     scope=dict(JointBridge=Base,self=NS(owner=NS(run=tmp_path)),time=time,json=json,__name__=module.__name__,__package__=module.__package__)
     exec(compile(ast.Module(body=[cls],type_ignores=[]),str(module.__file__),'exec'),scope)
-    b,goal=fixture();bridge=scope['ReceiptBridge']()
+    # This test exercises persistence only; bypass the ROS/timer constructor.
+    b,goal=fixture();bridge=object.__new__(scope['ReceiptBridge'])
     bridge.__dict__.update(b.__dict__)
     bridge._cancel_action('simulated residual timeout')
     saved=json.loads((tmp_path/'last_action_error.json').read_text())
-    assert saved['reason']=='simulated residual timeout' and saved['targets']==goal
+    assert saved['reason'].startswith('姿态到位检查：simulated residual timeout；')
+    assert 'Joint_Left_Gripper' in saved['reason'] and '编码单位' in saved['reason']
+    assert saved['targets']==goal
     assert saved['frame_index']==1 and saved['measured']==b._current
     assert bridge._action_state is None and bridge.outcome[1] is False
     # Later status/idle changes cannot overwrite this saved failure.

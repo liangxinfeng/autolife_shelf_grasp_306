@@ -1,0 +1,1122 @@
+{
+  "robot": "345",
+  "date": "2026-11-09",
+  "source_path": "/home/ubuntu/ros2_ws/src/autolife_shelf_grasp_306",
+  "parent_branch": "robot306-20261013",
+  "branch": "robot345-20261109",
+  "files": {
+    ".gitignore": {
+      "sha256": "3baf6fcf494f0b8d7fc01829dd483c1632b619f0311fadaf08c912526b1326bf",
+      "bytes": 152
+    },
+    "CHASSIS_ZH.md": {
+      "sha256": "cfd80f9606a47e0f584654eb5efbe649c29e6a58fac9aced97e73a5b74c1b32e",
+      "bytes": 1095
+    },
+    "NAVIGATION_DEMO.md": {
+      "sha256": "7f9d555daae19663f209c987296102e9b6c80337a4fbc464d674ebf527b5fac4",
+      "bytes": 1905
+    },
+    "PREPARE_AND_CATALOG_ZH.md": {
+      "sha256": "2edf5771900dc40836b07bf196d1e8f610c43d7034fc2062011c7e0f8c4b1b12",
+      "bytes": 1703
+    },
+    "README.md": {
+      "sha256": "5b5d356e4b903e5543ff5fede65e9cfd3168252c0b9a2d79ff5a8a109c7d4b67",
+      "bytes": 2659
+    },
+    "README_ZH.md": {
+      "sha256": "97d78c44cd3dec20da6551aa88fab22a1b5384a5a6b96a90a7857bce98221099",
+      "bytes": 19773
+    },
+    "RESET_RECOVERY_ZH.md": {
+      "sha256": "f65936d1efbd32355164968ecc84723f7e595dafa4ca7c6ad570efd07eb1dc14",
+      "bytes": 1464
+    },
+    "VALIDATION_ZH.md": {
+      "sha256": "e984dec350a58f6272f00cfa14c1bdb98b7094f88ff94c848b1d31283d711eea",
+      "bytes": 23493
+    },
+    "VISIBLE_TARGET_ZH.md": {
+      "sha256": "d711acea9bfe716d24176ec01b81dda64d5336a18925eb325e79ec25007d9ff4",
+      "bytes": 1149
+    },
+    "WORKFLOWS_ZH.txt": {
+      "sha256": "8f9e3bbc1d5c76c22fd118be8799012fa2122409211f3a2835e7c0e5bc300a65",
+      "bytes": 2514
+    },
+    "autolife_shelf_grasp_306/__init__.py": {
+      "sha256": "2681bd3cf711c14681ae42bb464cdd8354cdeed6c53d837e602ecb15c5053e19",
+      "bytes": 69
+    },
+    "autolife_shelf_grasp_306/action_arrival.py": {
+      "sha256": "3ed680029a4b7431e406bf412206be357f2c863f6d71bc0b52d5f7aeafb764ec",
+      "bytes": 7546
+    },
+    "autolife_shelf_grasp_306/action_pose_arrival.py": {
+      "sha256": "6ee4e7bf23c5b037c30259508e0f24f5050dca02f1c64264ae423b973f5330c7",
+      "bytes": 6586
+    },
+    "autolife_shelf_grasp_306/action_studio.py": {
+      "sha256": "8df83a0bfa86c2229390eaa48a9c48d99aae4d7ad40381a9b3a3d088a6921d7b",
+      "bytes": 25608
+    },
+    "autolife_shelf_grasp_306/app.py": {
+      "sha256": "a53e8bb4312ccc365daff2b16f553f8a2543720ec2210868d6dc3e4f11ee8055",
+      "bytes": 71301
+    },
+    "autolife_shelf_grasp_306/arm_selection.py": {
+      "sha256": "4c2014d4fd930d43840065bb67e5cb0c46051a5967e5c07af5a9302982e3f44b",
+      "bytes": 9236
+    },
+    "autolife_shelf_grasp_306/auto_grasp.py": {
+      "sha256": "4fb7f9943abbc5ac99c2df2b225bf320784d9b8cd09f95e2611107e537c1606a",
+      "bytes": 1547
+    },
+    "autolife_shelf_grasp_306/auto_task_ui.py": {
+      "sha256": "1a2ae89608b863ef375bedf40ece1051dec9f2ff642cfb0b640d102ef58f01f5",
+      "bytes": 16861
+    },
+    "autolife_shelf_grasp_306/base_execution.py": {
+      "sha256": "660de55469c5cc75ba0a2fac019260025547e7603aff92cec885d6941910cd48",
+      "bytes": 7728
+    },
+    "autolife_shelf_grasp_306/base_sequence.py": {
+      "sha256": "9a3142b8b6bfc42c167afdbbcdd91bd4c762de4cde4eccd8d462f2a84d27e77e",
+      "bytes": 9008
+    },
+    "autolife_shelf_grasp_306/base_sequence_ui.py": {
+      "sha256": "995cf1c2b358bd6644f451c9c87fee69ed196251a459587b664bab4b7d027a6c",
+      "bytes": 6059
+    },
+    "autolife_shelf_grasp_306/bottle.py": {
+      "sha256": "6952d68748ecd3469a5668ab53db0450549b46f884db0ccea10c1490ae083491",
+      "bytes": 12354
+    },
+    "autolife_shelf_grasp_306/bridge.py": {
+      "sha256": "50addb798a41505a0d0152f362040f4f85c827171941d964acfc48f21d349391",
+      "bytes": 4485
+    },
+    "autolife_shelf_grasp_306/calibration_profiles.py": {
+      "sha256": "695a779041340ac1a7591136dd6f41cde57d8c756aafcae90feef24e2db02e38",
+      "bytes": 3007
+    },
+    "autolife_shelf_grasp_306/camera.py": {
+      "sha256": "2da8469bb9f2407549343f86cfd404567d830a591233509d56b7e3cffbe362af",
+      "bytes": 4215
+    },
+    "autolife_shelf_grasp_306/carry.py": {
+      "sha256": "3ed174384bf75f2335d061696743ab73154bf2906ec6e2a470c96bd669d1f268",
+      "bytes": 1555
+    },
+    "autolife_shelf_grasp_306/chassis.py": {
+      "sha256": "8adec09f365e1dcd98f12975b6a6d6e5ab33274e43ba80e58d78cc032550390b",
+      "bytes": 7042
+    },
+    "autolife_shelf_grasp_306/chassis_ui.py": {
+      "sha256": "cfa4c42c05deab8e36fe2d0050e6d8f20d75e6d72ad91c6442770b55fd463f84",
+      "bytes": 6694
+    },
+    "autolife_shelf_grasp_306/core.py": {
+      "sha256": "f591bd8a1bf00ed7e3aba5ce85911de11ee07f128d62c542b780926f7207d451",
+      "bytes": 10489
+    },
+    "autolife_shelf_grasp_306/demo_config.py": {
+      "sha256": "2a111d08de07733d987d0aa588ba27045528dd677fe102a322f054cd448e0d12",
+      "bytes": 3659
+    },
+    "autolife_shelf_grasp_306/demo_navigation.py": {
+      "sha256": "1780de7db9271725e93579bb563b26a2ad4c12c0c438c46339228d66090ec100",
+      "bytes": 4112
+    },
+    "autolife_shelf_grasp_306/demo_observation.py": {
+      "sha256": "50c6b62af1c2428fd72637a47378cf7bf3000c165e7fc68a5bb65cefbbd2b677",
+      "bytes": 4021
+    },
+    "autolife_shelf_grasp_306/demo_planning.py": {
+      "sha256": "f5bd5ee7c53b7844ca0295c345c89a495fea26c49f99318a24f620eeb36da596",
+      "bytes": 34327
+    },
+    "autolife_shelf_grasp_306/demo_protocol.py": {
+      "sha256": "4afd8a729f9a3bb6daa048ba3330ef1f8c92e2d9291553cce650dd93d2ec8414",
+      "bytes": 6443
+    },
+    "autolife_shelf_grasp_306/demo_surface.py": {
+      "sha256": "2aeea562f42d6553788016cef9c3869a07d10172002a84cf33ba494015831302",
+      "bytes": 16109
+    },
+    "autolife_shelf_grasp_306/demo_ui.py": {
+      "sha256": "fe0901024896412d9021bc8a11149ef554dd340f49ce3669393f77f89341dc93",
+      "bytes": 1515
+    },
+    "autolife_shelf_grasp_306/execution.py": {
+      "sha256": "240ef87eefe0c3c000b3f4c8d6e329a18075ff2fca9555f4420e9eb640331b0b",
+      "bytes": 34144
+    },
+    "autolife_shelf_grasp_306/feedback_refresh.py": {
+      "sha256": "fce3c1e983f8d317337ae5925594fbcf1adce1961d9d02f0c2f991e467d52321",
+      "bytes": 2684
+    },
+    "autolife_shelf_grasp_306/geometry_memory.py": {
+      "sha256": "2973156e7a6696a312038e49fe7bb867793e0bca44a1cff593a7abfe805e7883",
+      "bytes": 3359
+    },
+    "autolife_shelf_grasp_306/grasp_collision.py": {
+      "sha256": "db534f988a5efffea07fd109a0e3bf541c45b2aa39058735cc62ca4c399a8b22",
+      "bytes": 4166
+    },
+    "autolife_shelf_grasp_306/grasp_geometry.py": {
+      "sha256": "061cbef4af02727082750ce35b682e012f7840cccebd550abc879978eccf58ba",
+      "bytes": 3338
+    },
+    "autolife_shelf_grasp_306/grasp_gripper.py": {
+      "sha256": "ca53d97d9370d13131a1f8d0738959bb11fb0d55c4673ab5b918e1a34dbd4bf5",
+      "bytes": 4405
+    },
+    "autolife_shelf_grasp_306/grasp_speed.py": {
+      "sha256": "6030b88825e4222b59bd024e7eeddd74a4aeffe02762154fd932ecde0cb664d2",
+      "bytes": 502
+    },
+    "autolife_shelf_grasp_306/grasp_start.py": {
+      "sha256": "c13eb55784b3e114dd44d6a600ec27b8e61e4c860b1286408471e15b6648409f",
+      "bytes": 289
+    },
+    "autolife_shelf_grasp_306/grip_width.py": {
+      "sha256": "4d01bb8e9303f037f4ea549d04051004841bcc06eadfedd73752952ed4ab0554",
+      "bytes": 3350
+    },
+    "autolife_shelf_grasp_306/grounded_sam2.py": {
+      "sha256": "9cfbb638a705f01e445ea7b572a0f37c3b3730865a47b0da5d7733d94461b4c0",
+      "bytes": 13238
+    },
+    "autolife_shelf_grasp_306/joint_limits.py": {
+      "sha256": "8dac5972654f05dee50683bb1099f173542b5a7489c5dc43e9092cd9cb3a9452",
+      "bytes": 2919
+    },
+    "autolife_shelf_grasp_306/live_overlay.py": {
+      "sha256": "06731c68417db61b5f15bbbc88d0f7241c2b5383cfd9916bae203984bce2d13e",
+      "bytes": 6544
+    },
+    "autolife_shelf_grasp_306/local_contact.py": {
+      "sha256": "7f6f0d274c475c0b9446910617489ca88d03d57922075165940c65fe1765bedd",
+      "bytes": 3777
+    },
+    "autolife_shelf_grasp_306/motion.py": {
+      "sha256": "5c3648b839cb0a68653aa5317171f0a167a952d67cc1dea241dbd18d9412ca05",
+      "bytes": 15446
+    },
+    "autolife_shelf_grasp_306/multiframe.py": {
+      "sha256": "b6319244be08f99bc2c01156049fa14015c55b20e9abf74403b57dd7fa5fcfe0",
+      "bytes": 1515
+    },
+    "autolife_shelf_grasp_306/navigation_bridge.py": {
+      "sha256": "0a46e6666453235e79ee906d0a536a27f238217ddb4b7ad7d08fc1250d5fef96",
+      "bytes": 29453
+    },
+    "autolife_shelf_grasp_306/navigation_heartbeat.py": {
+      "sha256": "54c1291ef696563237b3e796c855e7f37ab74e8c1d5634cc2706cfc56a5d016a",
+      "bytes": 2601
+    },
+    "autolife_shelf_grasp_306/navigation_logic.py": {
+      "sha256": "c8351e07e66381dc8eebed595acf0a340c11f3e1be68e37c61194c0b3aa91736",
+      "bytes": 8906
+    },
+    "autolife_shelf_grasp_306/navigation_map.py": {
+      "sha256": "2575529e3bcd05ff00fb3c6095b623cfdeafbedbb5f4e9490ba8183bc6e7707d",
+      "bytes": 1039
+    },
+    "autolife_shelf_grasp_306/navigation_runtime.py": {
+      "sha256": "a4aeeb4fc2e712fb9fb2991f9cf2a72a334f6898eaf2f84ec2993ae248276544",
+      "bytes": 4679
+    },
+    "autolife_shelf_grasp_306/navigation_ui.py": {
+      "sha256": "163e856257debd4bd4bf96704a940fd29974e6aab7d7f467e0365dbcffd1dfea",
+      "bytes": 18769
+    },
+    "autolife_shelf_grasp_306/no_wheel.py": {
+      "sha256": "e33b881f042b61d9b183e62b9c0146a8bab38f88975df76a2e264cb096cd57a7",
+      "bytes": 384
+    },
+    "autolife_shelf_grasp_306/object_extent.py": {
+      "sha256": "568a0a06bc751338f7a33881c7885472928af74166f6d1bfd43b597cba9d330e",
+      "bytes": 3772
+    },
+    "autolife_shelf_grasp_306/object_geometry.py": {
+      "sha256": "0eaeeaefbf5bb09c40a5684e2048d9e3df662d3b83a9e63bdc3e7c01495a69cf",
+      "bytes": 2491
+    },
+    "autolife_shelf_grasp_306/perception.py": {
+      "sha256": "7cdcffe6a11b6a674cd082349abd6ed85956a9a1c71fb3352bc33d4d9902fa53",
+      "bytes": 9284
+    },
+    "autolife_shelf_grasp_306/placement_request.py": {
+      "sha256": "6c0305202dab9557224de72c790f3b6b57010dfb43a0e9d970eb9b7421857937",
+      "bytes": 2502
+    },
+    "autolife_shelf_grasp_306/placement_support.py": {
+      "sha256": "2c07a039e2731a6b6c05cdf1b9ef60e5e85d551cab0ecb9e10da0da76cb4a40c",
+      "bytes": 3225
+    },
+    "autolife_shelf_grasp_306/planner_cache.py": {
+      "sha256": "d4bbbcdde94a9d15261b42211342baf7a46998ab2448fca24bd3825fbc1603f7",
+      "bytes": 1020
+    },
+    "autolife_shelf_grasp_306/planning.py": {
+      "sha256": "bb7447d87df89ee63207db665d12f2f110e73a2bcf35753c638bde72bb9611eb",
+      "bytes": 37939
+    },
+    "autolife_shelf_grasp_306/planning_control.py": {
+      "sha256": "95fdacc922cfaebde2d15e1a23833ec69838e75949336bffbb00fd945d409340",
+      "bytes": 3986
+    },
+    "autolife_shelf_grasp_306/point_cloud_filter.py": {
+      "sha256": "8c258078ff02509d91394afc992f965a318b6c9ff40ab01b20c7e8abb5d87073",
+      "bytes": 1810
+    },
+    "autolife_shelf_grasp_306/point_selection.py": {
+      "sha256": "fb9c465796ad835e9cc683acf5a6609521bebc5b2081d34585c38978dfe94702",
+      "bytes": 6693
+    },
+    "autolife_shelf_grasp_306/pose_collision_scope.py": {
+      "sha256": "1665ee9d0d8aada1b6ee40cd68263d7e2fb8e104e5eabe21ca1f1744f2c08b03",
+      "bytes": 3625
+    },
+    "autolife_shelf_grasp_306/pose_execution_bridge.py": {
+      "sha256": "65893ef91d19d4bb868ccc81d4090472a7de3287e6d0089985078cd84c85090a",
+      "bytes": 13682
+    },
+    "autolife_shelf_grasp_306/pose_execution_profile.py": {
+      "sha256": "93a1a7549be195c27d456742003be187c8a29d9c2300fff8e421ed68401a2661",
+      "bytes": 963
+    },
+    "autolife_shelf_grasp_306/pose_geometry.py": {
+      "sha256": "a2dcad386934ab15ef55a0ed46cfd825010c69a199ed2611a3727fbae9a42973",
+      "bytes": 4633
+    },
+    "autolife_shelf_grasp_306/pose_handoff.py": {
+      "sha256": "f17ceeb2270a9cee0b166276d2274d809cba03221fccc6f9c61c3d648575736c",
+      "bytes": 3450
+    },
+    "autolife_shelf_grasp_306/pose_ik_worker.py": {
+      "sha256": "6d680fbe2962434a0a3d7cf7d04b5dc2a8844528f91d3d7b622efb92dc4f023e",
+      "bytes": 3793
+    },
+    "autolife_shelf_grasp_306/pose_manual_session.py": {
+      "sha256": "ad11c9929f12d2163b002d2be0e8bf051f9fca9e9ac54c9798cc0ac424929b50",
+      "bytes": 4846
+    },
+    "autolife_shelf_grasp_306/pose_mirror.py": {
+      "sha256": "50b606ce391a43fcd855347b5b1fb4749f9eb8312f9e3e0b7d527e5da6472e3b",
+      "bytes": 2064
+    },
+    "autolife_shelf_grasp_306/pose_reset_execution.py": {
+      "sha256": "0c72c8bc1048045a2c7786adfea4ab0f0cf182157c37039015d7527793f9ff42",
+      "bytes": 2898
+    },
+    "autolife_shelf_grasp_306/pose_tcp_axes.py": {
+      "sha256": "d5e321190e51a5b0c690f5996a38120da2b56d28f8c5bd0f105dd64158b94078",
+      "bytes": 4213
+    },
+    "autolife_shelf_grasp_306/pose_workspace.py": {
+      "sha256": "e989ceba03ec99a0f8cd77bd3c63a6dce2584a1333feae10abdeae8e86f0af8b",
+      "bytes": 39984
+    },
+    "autolife_shelf_grasp_306/pose_workspace_data.py": {
+      "sha256": "62f7ac910c9a154cb83909d5519d5000fc7f17ad40c3b520832edc48be3a9e4a",
+      "bytes": 3977
+    },
+    "autolife_shelf_grasp_306/pose_workspace_motion.py": {
+      "sha256": "1752e85a70c3e806076ac54b30d0cccf6dd067082bdd9241997ecf1bfc321087",
+      "bytes": 4755
+    },
+    "autolife_shelf_grasp_306/prepare.py": {
+      "sha256": "73a970c06a962eaaa97480371cb5b38c1793eefd8874e1286ad8bde58247ab37",
+      "bytes": 4589
+    },
+    "autolife_shelf_grasp_306/recorded_posture.py": {
+      "sha256": "66141681afdad86178f25e07c8d2aa7a856070a0d3eee8b10c75049e6d7a1108",
+      "bytes": 894
+    },
+    "autolife_shelf_grasp_306/reset_collision_scope.py": {
+      "sha256": "1d4fd29d4068f2e93f4788049c577191079602248e6c697d8ab8b0c7c6c6ebf2",
+      "bytes": 3640
+    },
+    "autolife_shelf_grasp_306/reset_recovery.py": {
+      "sha256": "a7f71ba6fb161ddd8efbdc6eb86ab288ac2cfc7fbd510d76872e8436fc5daf6f",
+      "bytes": 6325
+    },
+    "autolife_shelf_grasp_306/robot.py": {
+      "sha256": "4e91453dffe51f20fff03256b648989263713850fd6dff27798775bbec8d6467",
+      "bytes": 4616
+    },
+    "autolife_shelf_grasp_306/segmentation_display.py": {
+      "sha256": "02c3aa5709b6b8d6403eb4dd7a9fb52756423584af5be2219f8f51e01b600670",
+      "bytes": 956
+    },
+    "autolife_shelf_grasp_306/selection.py": {
+      "sha256": "d009c53e761321a042621fa3b7395cbc483a474b962c591ae62a5644c40e5549",
+      "bytes": 2441
+    },
+    "autolife_shelf_grasp_306/semantic_placement.py": {
+      "sha256": "82df3e1aee9605a6cccb9756a212f340606c4e95951f3167624d3d8cf5719382",
+      "bytes": 3208
+    },
+    "autolife_shelf_grasp_306/step_posture.py": {
+      "sha256": "540f2ad2920becda39b6affe9a1624ff698842d59a8ca79c22db112048a2a6f8",
+      "bytes": 3150
+    },
+    "autolife_shelf_grasp_306/supported_neck_recovery.py": {
+      "sha256": "3e61670b490ef027b7f34a7deed358287df8e19d1e49c64fed31cd7940a54512",
+      "bytes": 9278
+    },
+    "autolife_shelf_grasp_306/sync_session.py": {
+      "sha256": "f849b6a31949042a0a0799a91a2482675702dd9806453df56d533e632bfc8e01",
+      "bytes": 5052
+    },
+    "autolife_shelf_grasp_306/target_offsets.py": {
+      "sha256": "4fd37139322c0886e26bd209a03124799826516097e7160be98accc628631b0d",
+      "bytes": 1623
+    },
+    "autolife_shelf_grasp_306/target_offsets_ui.py": {
+      "sha256": "5b6427bf42b48c53090dc69f4962c851459f7558077eef761c9fc6a39ffe55f3",
+      "bytes": 2760
+    },
+    "autolife_shelf_grasp_306/task_capabilities.py": {
+      "sha256": "7fe098187776a532e1bdc1f4e1f8e9db319ce49b8b4f1ee5f945cddc82918718",
+      "bytes": 895
+    },
+    "autolife_shelf_grasp_306/task_display.py": {
+      "sha256": "cd03603d42b77ba0ca97fb72e697f8ee05c2e8e56833b2d21c3c5d41eecea01a",
+      "bytes": 6191
+    },
+    "autolife_shelf_grasp_306/task_flow.py": {
+      "sha256": "9e63152ff3d1efebcd64de145cd09fc8cdd45a0339583d1411ea04ba5350087d",
+      "bytes": 7217
+    },
+    "autolife_shelf_grasp_306/task_flow_ui.py": {
+      "sha256": "67e5f6246530e64b68960faafad692847776fc0c4216756e064a14954855921a",
+      "bytes": 32293
+    },
+    "autolife_shelf_grasp_306/task_pause.py": {
+      "sha256": "4fe0112ed74687f4f4709ebdaa66600d8bd945fd791e5faca50e0eb23397d839",
+      "bytes": 3958
+    },
+    "autolife_shelf_grasp_306/task_recognition.py": {
+      "sha256": "ab8e67f9a42b5cf8b78d6e27358009087704f26079ecc984581f81e2c146b2e1",
+      "bytes": 1519
+    },
+    "autolife_shelf_grasp_306/teaching_client.py": {
+      "sha256": "f140e307a74ec91d63996b8883b9b299346742d3acce9bd5ce5ce71fa74e866f",
+      "bytes": 3665
+    },
+    "autolife_shelf_grasp_306/teaching_composer.py": {
+      "sha256": "0592a8077d02c5a1a98d12ef1246516d0c8bd539efd28f1d61eca30d8512aa89",
+      "bytes": 30974
+    },
+    "autolife_shelf_grasp_306/teaching_controls.py": {
+      "sha256": "ab78504101372848bbf6614c525b488626e61872672ab55c05636a431c18ae3b",
+      "bytes": 6954
+    },
+    "autolife_shelf_grasp_306/teaching_enable.py": {
+      "sha256": "658db50450b67e631694e58266f86f7d9aaa4446e21acf65d5fb9fd1a40bca31",
+      "bytes": 4533
+    },
+    "autolife_shelf_grasp_306/teaching_feedback.py": {
+      "sha256": "968df461ab3a4830b1bed0cb41d4ad0f09029afec9210bc17f0b556c93a58bb1",
+      "bytes": 3775
+    },
+    "autolife_shelf_grasp_306/teaching_gripper_follow.py": {
+      "sha256": "f49ce905e6ee64328691e7caa3faacd7336da1b2ecc116e6b6e36e940b0f9a1f",
+      "bytes": 2961
+    },
+    "autolife_shelf_grasp_306/teaching_library.py": {
+      "sha256": "b569187ccc1b145888db46a155071909101b0e742d36acc3361600039743d4dc",
+      "bytes": 4159
+    },
+    "autolife_shelf_grasp_306/teaching_motion.py": {
+      "sha256": "31111700692b39c7cf7c13f4aa760b3e251d139fc1992c7178f870c6891890d1",
+      "bytes": 7026
+    },
+    "autolife_shelf_grasp_306/teaching_output.py": {
+      "sha256": "8fd8970f106b7253b38f5bfe80feb9cc500d12088c978e77bed968b099b1e148",
+      "bytes": 2463
+    },
+    "autolife_shelf_grasp_306/teaching_recorder.py": {
+      "sha256": "030e7ae09d08f85abfac44e0c80ef049be08863121c844836e471b85756c0f46",
+      "bytes": 14558
+    },
+    "autolife_shelf_grasp_306/teaching_replay.py": {
+      "sha256": "f04375c5251a3e651d65be67c2965edcce6f1a4fda1be5764c1f742195847dbd",
+      "bytes": 9485
+    },
+    "autolife_shelf_grasp_306/teaching_runtime.py": {
+      "sha256": "aa5e0ab6b98e7bbd46734bdd502e0916464eeb9ca75ff072d08a12ef6762008a",
+      "bytes": 5465
+    },
+    "autolife_shelf_grasp_306/teaching_service.py": {
+      "sha256": "36637069f6f251d49d31f081bb0acf16e76adf914768a959a822c25c69bd7ee4",
+      "bytes": 4015
+    },
+    "autolife_shelf_grasp_306/teaching_studio.py": {
+      "sha256": "f22641059febc799ee22e70a8739ba300152af7e27d049bab2d508bdcc9d2ea5",
+      "bytes": 4641
+    },
+    "autolife_shelf_grasp_306/teaching_sync.py": {
+      "sha256": "a8e24cef054ff9bee0719ce1cb74c20f7fbe875b8796991b2f45e9e50bc91025",
+      "bytes": 2594
+    },
+    "autolife_shelf_grasp_306/teaching_track.py": {
+      "sha256": "5231e9c153be09807fd8e53d976a8ae8e7ebc8951e3d93e04169ff4f53aff960",
+      "bytes": 16424
+    },
+    "autolife_shelf_grasp_306/teaching_trajectory.py": {
+      "sha256": "a3ee1caf54c40cf37f21d197dcead99c975cd1ce5099fe449acb16759c000671",
+      "bytes": 3561
+    },
+    "autolife_shelf_grasp_306/teaching_vr_runner.py": {
+      "sha256": "a51ae8c1c66305c7fa0934869abeb844375499c67cce4b7f4f5e52de0616b9e0",
+      "bytes": 2702
+    },
+    "autolife_shelf_grasp_306/unregistered.py": {
+      "sha256": "3c6c8050161ba9104ff3fca43273c7753347a5fc2bcba6fecc57b11f0851c6f0",
+      "bytes": 16662
+    },
+    "autolife_shelf_grasp_306/vendor_grasp_planning.py": {
+      "sha256": "3ee67b0b929f0e736a9a33df89323cef72ac3353e67153839ab77caa8dc63f14",
+      "bytes": 15120
+    },
+    "autolife_shelf_grasp_306/vendor_grasp_trajectory.py": {
+      "sha256": "9849a7e9e097e91713e2fe6bfcb034958a5bc56881db623c1bc60cabc422e576",
+      "bytes": 11616
+    },
+    "autolife_shelf_grasp_306/vendor_ik_process.py": {
+      "sha256": "bb42bb4f0f35c7e1a17c888f89ae656bf0deded80190be64585e6c021f3bc204",
+      "bytes": 6011
+    },
+    "autolife_shelf_grasp_306/voice_settings.py": {
+      "sha256": "b0c53c39ff1514fb835cd8e0c7a6158bb3f15e8756538d592b2cf91c1be0ecf0",
+      "bytes": 343
+    },
+    "autolife_shelf_grasp_306/worker.py": {
+      "sha256": "f09a205a8929196980ccbe11cba1eb975dc0fd3d9b2242cde5e38771f69559be",
+      "bytes": 53497
+    },
+    "autolife_shelf_grasp_306/workspace_reset.py": {
+      "sha256": "56e53da780019ac61f15f62a5dc4450e3b717f085429ad9902f17521a9e23006",
+      "bytes": 5407
+    },
+    "autolife_shelf_grasp_306/workspace_reset_bridge.py": {
+      "sha256": "09becb84b6c247aa3bce3c960809ee76b3fd162217a57ea710dda86485170e07",
+      "bytes": 1081
+    },
+    "config/grasp.yaml": {
+      "sha256": "7888a415ed72c47a07286001d0ef512bb950dbe58aee4d2fa723b29bdf76caba",
+      "bytes": 3864
+    },
+    "config/gripper_width.json": {
+      "sha256": "b72c02a8675171a8817ea3298b139e6ce334233ecf129160c6d1103eaf5452e0",
+      "bytes": 946
+    },
+    "docs/arm-mirror-and-reset.md": {
+      "sha256": "d2f512ed80ed9a90e15a5e797b06b375e69d471275df68b24c892f4cfd22199d",
+      "bytes": 1224
+    },
+    "docs/pose-ik-collision-scope.md": {
+      "sha256": "b8a26d2501665469e758c6bea7c1388fd7ff61c88292cac00c7e1fec9808f05f",
+      "bytes": 1382
+    },
+    "docs/pose-reset-speed.md": {
+      "sha256": "4a0d5713cc2eadb102fe31a0489267df1e96670653fbcc50363cc8f7751c8e7c",
+      "bytes": 1723
+    },
+    "docs/stationary-neck-scope.md": {
+      "sha256": "f742c6b34a8d8d1faa299f6b035c2f6ad8526a07ecad7e0c91e82253a483c1d1",
+      "bytes": 1064
+    },
+    "docs/urdf-grasp-geometry.md": {
+      "sha256": "06e218be9b364a23440a3e906e85a79c44a5a73d44caeee3fa51f9fa401e5c60",
+      "bytes": 1458
+    },
+    "docs/原厂IK与整段抓取轨迹.md": {
+      "sha256": "e1ebeeea75f620c4f971fd2f4c8cb3d0b2790cf500daae1660d388fd29f8d33c",
+      "bytes": 4259
+    },
+    "docs/姿态与动作使用说明.md": {
+      "sha256": "0894e3aca6bcee53faec860f68fc1d90cf8d2b555a89f64649fb2bf6f5cbb170",
+      "bytes": 6681
+    },
+    "launch/grasp.launch.py": {
+      "sha256": "79a682f32f528210a6a55fad825b2abde1de43a2538c7894d0e5d1957e765a92",
+      "bytes": 225
+    },
+    "package.xml": {
+      "sha256": "ec99a5f3edc8f236b33f9b57df2c73768b803ff54f302eae9a258f63979c225d",
+      "bytes": 1318
+    },
+    "resource/autolife_shelf_grasp_306": {
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "bytes": 1
+    },
+    "scripts/fix_gum_dimensions.py": {
+      "sha256": "7dfcc23eff40635f5c5ee20aac9870c7619e3790e5c88713bfdef7bc2c5b09f9",
+      "bytes": 724
+    },
+    "scripts/grasp306": {
+      "sha256": "92faea2a1de0f52a63a1da0d6bfe2430f826fb930f63eef68dd6947e8792ba00",
+      "bytes": 163
+    },
+    "setup.cfg": {
+      "sha256": "944796272a5c38cd9485af39ff2a94232f63f637ae4254b9690911c3856fd206",
+      "bytes": 117
+    },
+    "setup.py": {
+      "sha256": "d9e9b77f7da73de82c3a925926c78f97e3eb29e4fd7e9ebeecb0c9d1129f117a",
+      "bytes": 701
+    },
+    "test/benchmark_follower.py": {
+      "sha256": "21e06ba1a47ae7fe69eb8c03fd4d4526d5f1f606556127f567779f3fab0f36be",
+      "bytes": 1270
+    },
+    "test/capture_scene_readonly.py": {
+      "sha256": "1fade7f5d69b9ab7901a8ed8cd24c642ec6b99e7854f5b027a7cf7169f4e356e",
+      "bytes": 2063
+    },
+    "test/probe_bottle_depth.py": {
+      "sha256": "14427081ae49cfc643e5803d97b8e32714692d5ca38cbbd6b395b08fc5a434ef",
+      "bytes": 2388
+    },
+    "test/probe_catalog_readonly.py": {
+      "sha256": "29ed35613b1ea2c5e97dbe7f3f758a26f8e2e84db077ea0e38eda0f76af53d06",
+      "bytes": 4072
+    },
+    "test/probe_chassis_idle.py": {
+      "sha256": "e66a0216d7aa6b4a0dad495c5b25fdb6152e8291e2a0d3ac0cc4bc5fbab80f89",
+      "bytes": 985
+    },
+    "test/probe_flexible_ik.py": {
+      "sha256": "4660ee862454480f9d6d21fc9f85c6bc47d82e6039f983586ff27bb0914aee2a",
+      "bytes": 2038
+    },
+    "test/probe_multi_readonly.py": {
+      "sha256": "c4f0bb6915a0ae0ffc3b75e1dfbe992964b011378f135c40f681186ebd5cb21a",
+      "bytes": 2788
+    },
+    "test/probe_navigation_readonly.py": {
+      "sha256": "3935c7d104d65ab6312e8d9c8804675e988fdc2baba74c654538a672b35a62e6",
+      "bytes": 1402
+    },
+    "test/probe_objects_readonly.py": {
+      "sha256": "ea7e1f71d7a92bd9a869b1819cf84de418b34b5119ed4631764dcd9c05d50e14",
+      "bytes": 1480
+    },
+    "test/probe_planner.py": {
+      "sha256": "b56e6e1721c53593518a5f32e29bdf827007b31a786bb1fefad7545e36cd5111",
+      "bytes": 2158
+    },
+    "test/probe_readonly.py": {
+      "sha256": "a39ddd3ef8d221d152f338e4ff5d0aef687bd1d238605d4e9919f70760e99573",
+      "bytes": 2499
+    },
+    "test/probe_workspace.py": {
+      "sha256": "c3e62f081ca47dc4616f48622f08140ce5e1f5c3695147ddf9642d6116c845f8",
+      "bytes": 1754
+    },
+    "test/render_navigation_ui.py": {
+      "sha256": "08fe66b6d4b3f4f58bce0b5f65454642195029c876ce83e57ca43d778298ed15",
+      "bytes": 1304
+    },
+    "test/render_teaching.py": {
+      "sha256": "665567d45178bc7cda7fb2329f7c6b58cacfe1a7023bb8c191166e988f850c7c",
+      "bytes": 2252
+    },
+    "test/render_teaching_modes.py": {
+      "sha256": "a4a55df6a59fcba26c81ffa27f288fc4bc1e98da56ca339737d7c3d5d61f7357",
+      "bytes": 2644
+    },
+    "test/replay_approach_readonly.py": {
+      "sha256": "3d42b55d67ff3d8063327730b86ba2ccaff61d140e9d7de292c3622545f8572f",
+      "bytes": 1390
+    },
+    "test/replay_bottle.py": {
+      "sha256": "9babe893d1a9a560d11d9793f17e493b7249eff23dc1f4f78dd1a505cdc10450",
+      "bytes": 1551
+    },
+    "test/replay_endpoint_readonly.py": {
+      "sha256": "a29f39a18716a50f2c70056000700b90573680dd0f8b1691dace9a448ca7aa27",
+      "bytes": 1016
+    },
+    "test/smoke_action_receipts.py": {
+      "sha256": "2623779a155feed01274d38bd89645ff7b433cd4611c54310790a668d2e2c959",
+      "bytes": 2704
+    },
+    "test/smoke_chassis_ui.py": {
+      "sha256": "c154f25f00d153e13ffefe9bf703bc765f7e3fb1e9adf66102b4e1c3bfac0c59",
+      "bytes": 2191
+    },
+    "test/smoke_demo_ui.py": {
+      "sha256": "3aab27cee64dcf7a2cbbc989a33355cc3bb69c02f5328d347ac070da48e80ff5",
+      "bytes": 2456
+    },
+    "test/smoke_full_readonly.py": {
+      "sha256": "2017caa609e2f6ca959b082df038c6abd5a42413d7946cdc05b67ea9c9befbcd",
+      "bytes": 1469
+    },
+    "test/smoke_mask_ui.py": {
+      "sha256": "4a45a2f87f76a97e564fe07cae4feb57faa2b912b94fb5fd4518bd2c699bcb5b",
+      "bytes": 1842
+    },
+    "test/smoke_navigation_isolated.py": {
+      "sha256": "e7e701fa3ba8be4f72e488b3a734941c769c42f02611594f7b9d26eef66181df",
+      "bytes": 5104
+    },
+    "test/smoke_pause_localization_isolated.py": {
+      "sha256": "6fc33b57032cb215a482e16b03b4c8faf8dc0b6ca5ca8d6995bb896b2786bfec",
+      "bytes": 7273
+    },
+    "test/smoke_plan_readonly.py": {
+      "sha256": "68db0d459b949a2fcf72c9f50b049420e1c82143a7f1766b789434aa2781b8ed",
+      "bytes": 2033
+    },
+    "test/smoke_semantic_ui.py": {
+      "sha256": "0fca52ad6f7a1412560475121b086bc688d6bfbdc64cb0f0e338606fe488248d",
+      "bytes": 1513
+    },
+    "test/smoke_standalone_place.py": {
+      "sha256": "81d6256ce05976fdafe76a51a289ab5ffe99f4bce57f3fae50810d2e67a61bd3",
+      "bytes": 2986
+    },
+    "test/smoke_teaching_executor.py": {
+      "sha256": "742c0972b94444fccf3d8843e003c2d51c94c0942e7910e7b2055e81161b1885",
+      "bytes": 6580
+    },
+    "test/smoke_teaching_runtime.py": {
+      "sha256": "48c61eef7c0dead44ec798c806d8591c7d763ca74a8d7be84c06ba3c73ff413c",
+      "bytes": 1505
+    },
+    "test/smoke_teaching_service.py": {
+      "sha256": "6d95ad353b84ce698df2e4302eca543ed13b143636e6387c90b808643c6c0410",
+      "bytes": 3414
+    },
+    "test/smoke_ui.py": {
+      "sha256": "3c78a7c04fbc0e86046d076ea48716a068670ba5810ff49bea8607f43ab9e8a8",
+      "bytes": 4551
+    },
+    "test/smoke_unregistered.py": {
+      "sha256": "c339b377769be268a306fcf13859ad91e4037100a0a903feeea890295a19a2e0",
+      "bytes": 1296
+    },
+    "test/smoke_workflow_ui.py": {
+      "sha256": "cf23ac7da69f44c439cd35beed455cd83b21c9790c40659f74f278c5b80ec229",
+      "bytes": 3421
+    },
+    "test/test_auto_grasp.py": {
+      "sha256": "733ac4fb82152c9571f130b7168d3ca9719986f3eb89c6a63fbd2fd2218be965",
+      "bytes": 6684
+    },
+    "test/test_auto_task_ui.py": {
+      "sha256": "f82babd97f7a9a6252f7e09856e8b89c040fac27266d476ca84ca913ba900044",
+      "bytes": 8290
+    },
+    "test/test_base_editor_interaction.py": {
+      "sha256": "1daf26f0a5a85b22ed27c3f8d8e072d552e85c2631ea09ca5e6035d94c17498c",
+      "bytes": 2268
+    },
+    "test/test_base_motion.py": {
+      "sha256": "72fe351ebc3e4e19cf8cfa1cd839a367f573321ef6aacbd6409aa6395d85772a",
+      "bytes": 4027
+    },
+    "test/test_bottle.py": {
+      "sha256": "e636bbabe679b9f4f3df4de99990a5ba3db16d78cfce15e0e1c336b690262d24",
+      "bytes": 4740
+    },
+    "test/test_bridge.py": {
+      "sha256": "aa7821a959c0e5dd249172247ae72c290ba9291c95f13aaf480f2b7681f5f4b5",
+      "bytes": 3764
+    },
+    "test/test_calibration_profiles.py": {
+      "sha256": "df3de030cdae75ddef4bb259a1c582b6f1b7aed4f1cdd1ca00527c2bd96b1ed6",
+      "bytes": 8935
+    },
+    "test/test_catalog.py": {
+      "sha256": "241e26f0cad14d3e5cefba8960abb272cd6abacc3d948488062765a7ee29f0d7",
+      "bytes": 4950
+    },
+    "test/test_chassis.py": {
+      "sha256": "73c8836dd479b9253b6bd1c624aad2d47512baa236dde5ff10c09093a8615c47",
+      "bytes": 1174
+    },
+    "test/test_contact_search_fallback.py": {
+      "sha256": "457aae4f5549cb5acd201da0b9658c7d465eba514ff54c117ec86d08e4eb56ed",
+      "bytes": 1692
+    },
+    "test/test_continuous_return.py": {
+      "sha256": "ee4cd3f163c04667baef3d10fcd069fa2a1742b4b50d73037907be37ff3edc51",
+      "bytes": 3747
+    },
+    "test/test_core.py": {
+      "sha256": "00e9205f6b10163821f9682458c055e3a06d262ac6e0547c3dee414866cb615d",
+      "bytes": 3104
+    },
+    "test/test_cuda_optional.py": {
+      "sha256": "f5c97a2bc4ff0f4a740b4f98a49bf053dc3e43819da8b8546f32fa07784479e9",
+      "bytes": 6917
+    },
+    "test/test_current_pose_grasp.py": {
+      "sha256": "b025817effd22e51540bee5a9d19f2f1018cf058df49c99c5ef12afe469bf3bd",
+      "bytes": 1479
+    },
+    "test/test_curvature_follow.py": {
+      "sha256": "bcbbab37e1cf91cce7f8d95f8abf0be5c67ee845517702835f0d096fa5e62f9c",
+      "bytes": 1724
+    },
+    "test/test_demo.py": {
+      "sha256": "34bf755cd927e357451fca4be339b12ad16b35125b5cd4eab8307a002bd61a87",
+      "bytes": 4203
+    },
+    "test/test_dual_arm.py": {
+      "sha256": "22ab4ccfcc68982ef8812195a9ba543200ee6be61ea2f72f7c1c32376a8a43b8",
+      "bytes": 5783
+    },
+    "test/test_execution.py": {
+      "sha256": "6aa3778decf43eac16118bec22f6655030b35665c1e64f3ad953d52e03ac2813",
+      "bytes": 17334
+    },
+    "test/test_fast_planning.py": {
+      "sha256": "1f8977a8d37e3f142290977830249adece5e572a2828edb271662cce022fcfe4",
+      "bytes": 6023
+    },
+    "test/test_fixed_carry.py": {
+      "sha256": "f8126723c9e2c0fd0bbfb0defa7fba788e0d90c7ec87bcb8463c04c5b99ec2c5",
+      "bytes": 3003
+    },
+    "test/test_foreground_cylinder.py": {
+      "sha256": "1637e7c87696419ec18d5410279a1b841b2cb7f75e706079fd9e614e48c0517a",
+      "bytes": 2608
+    },
+    "test/test_full_open_arrival.py": {
+      "sha256": "3fda7f493bf5dbbacbe9adc9cb6addc6146d43111aa1e284bccf676351270345",
+      "bytes": 6117
+    },
+    "test/test_geometry_memory.py": {
+      "sha256": "12004e6a62448b3f67999339e98d4562f1230bd5e59905e82242e06c3ccda76e",
+      "bytes": 4054
+    },
+    "test/test_grasp_gripper_execution.py": {
+      "sha256": "d78b77ac411aeba71807962007b24492fc57089fe259ed877edd7de68d24bab7",
+      "bytes": 3115
+    },
+    "test/test_grasp_speed_foreground.py": {
+      "sha256": "292ea41ce20a116a3523739d299b307ee3151b2056505208076a41ad46a995cc",
+      "bytes": 1996
+    },
+    "test/test_grounded_sam2.py": {
+      "sha256": "15f987081512206501b06feb488f95f716cb2c06ee9eef78073cd247a8273f66",
+      "bytes": 4358
+    },
+    "test/test_joint_limits.py": {
+      "sha256": "ade5740a748d7766989af78419c3e9d11243a72a0c66d6ffd96a93ea8d49ea43",
+      "bytes": 3175
+    },
+    "test/test_landing_prefilter.py": {
+      "sha256": "0338658ca9524cdce2a3950f557919d1c632f4fbaafd0d960935dd80192aa9c6",
+      "bytes": 1922
+    },
+    "test/test_live_overlay.py": {
+      "sha256": "e166c4edd474f846d94f65d913206d97148ed37e12a6ad95fe6617f1d051d37c",
+      "bytes": 3996
+    },
+    "test/test_live_ui.py": {
+      "sha256": "ef026902da1d38cab55f9c1a484c336bd4bccecf1493b34690c3a2b1fcdc4c24",
+      "bytes": 1438
+    },
+    "test/test_loaded_jaw_settling.py": {
+      "sha256": "e591cc7ce67e868dd3eb16aa2b6c19b0ca60f8673359886b0b3d83d9817ed282",
+      "bytes": 2210
+    },
+    "test/test_local_contact.py": {
+      "sha256": "d680c46eb5b967bebba46043ef978c7ff96fb8f1d4199d1e7c928451f65396a3",
+      "bytes": 3990
+    },
+    "test/test_localization_display.py": {
+      "sha256": "a2624576dfeb3099b708125cd713c75c813fac9f615c53a32218a1d6c0b9db0c",
+      "bytes": 1569
+    },
+    "test/test_margin30_ui.py": {
+      "sha256": "44306e043e027a3af1738570ffedd1d9754915bce57cd7164e89c6f201cb7ae4",
+      "bytes": 747
+    },
+    "test/test_motion.py": {
+      "sha256": "f448d984d39354b74b2891af2a7be47f0e6d1d70e8a2b04d2c1eac05725c451b",
+      "bytes": 5122
+    },
+    "test/test_navigation_demo.py": {
+      "sha256": "3a60631ae4a58802db2eedd735e26c98008dc2dc55d10d8ebd83638d66a76bb7",
+      "bytes": 2494
+    },
+    "test/test_navigation_heartbeat.py": {
+      "sha256": "3106f775c97a15075ad1b8207e73e34b4db23d269b6ded5b6d8e1e818a731089",
+      "bytes": 7040
+    },
+    "test/test_navigation_map.py": {
+      "sha256": "62fcbbf77ebc03b4dec6fd19159572560000761216f122e2bbc2ab4fa06ae7f2",
+      "bytes": 1422
+    },
+    "test/test_navigation_pause_resume.py": {
+      "sha256": "5887fd1281c3eac61e94ec5639a17219e691178644ee1f89175408a40c527a37",
+      "bytes": 2527
+    },
+    "test/test_navigation_runtime.py": {
+      "sha256": "3b3f3981580f042c3374e6f589860e5174407b02452c5c84a4a08ddcc8f18aca",
+      "bytes": 2857
+    },
+    "test/test_new_settings.py": {
+      "sha256": "ad9606aa81f10a0e317e2226e09e65d2ff273d67feb55f1724ccea3d8cb3afa7",
+      "bytes": 3849
+    },
+    "test/test_new_ui.py": {
+      "sha256": "66ab12951c8bdb5e2f64081d4611c6179ce4340a924a8e7540c0d550a55fab70",
+      "bytes": 2175
+    },
+    "test/test_object_extent.py": {
+      "sha256": "db7994a5bbfd261750592cda81ec8cdd731a69005d99a1b97be9369d4e3f9075",
+      "bytes": 4378
+    },
+    "test/test_objects.py": {
+      "sha256": "24e0f69b5969a851583dbb10709d902a032eaeb4314fda98dbd61ec122101b30",
+      "bytes": 1893
+    },
+    "test/test_observation.py": {
+      "sha256": "3bdcba2809e318cc4c1aa984f21689c1c937810604236e692efac9a826bfa22c",
+      "bytes": 2613
+    },
+    "test/test_open_endpoint_contract.py": {
+      "sha256": "076d299c707b297f44a2ae05a8f6cad9e9a5d02b9b4cf7a4c16c6c9bd7394d8f",
+      "bytes": 3778
+    },
+    "test/test_opening_continuation.py": {
+      "sha256": "695e259f73a541f50fc71ba46446796e6fabe2aee0c8e149c98bebfa78430147",
+      "bytes": 3423
+    },
+    "test/test_opening_residual.py": {
+      "sha256": "4ad2ecdeaa6430d2cb395f6d468987208a4c0c511245880f9659bb5062b1b5c2",
+      "bytes": 4756
+    },
+    "test/test_pause_execution.py": {
+      "sha256": "93104dde1346386f0341b0e5b3e7cc192c2c08025a268f94afb27f4576be24fc",
+      "bytes": 1513
+    },
+    "test/test_pending_map_icon.py": {
+      "sha256": "9cef2873ae609ca4f98c9d37c177f702f05b47ca21ec79830ec847ec65c0bc69",
+      "bytes": 827
+    },
+    "test/test_perception_filters.py": {
+      "sha256": "60d29ee59e1f5aff7c735b22f02b1a9432a4b791dc3b3e1da5daa86b49877934",
+      "bytes": 478
+    },
+    "test/test_place_broadphase.py": {
+      "sha256": "326ff73c7e282394c4b4fcfba81c4fcbe3f5c888ad45c2892dceb9c913ea34dc",
+      "bytes": 2037
+    },
+    "test/test_place_candidate_coverage.py": {
+      "sha256": "889af400f335d54e5054f4adc9c3fe6aeda3393c4a13a5e77ebcf977d4978c01",
+      "bytes": 2098
+    },
+    "test/test_place_exhibition.py": {
+      "sha256": "c1b030e144ca3edca1ec30b515c07d2fa6907793e1723fa64022e96d8bad8ae2",
+      "bytes": 3111
+    },
+    "test/test_place_exit_geometry.py": {
+      "sha256": "4bc5b785684fbb97ae1f0618064c5982fddc9f176992c793bddecd2ad15b4dc5",
+      "bytes": 3282
+    },
+    "test/test_place_reobservation.py": {
+      "sha256": "6be69f227a035d7eac738fac9b90043ec53327856af7635ae8c6a550cecca39f",
+      "bytes": 2050
+    },
+    "test/test_place_search_fallback.py": {
+      "sha256": "e267c5c7daaa82291ac58d334a287df568bda87ac79317a338f977e364223667",
+      "bytes": 2308
+    },
+    "test/test_place_speed_ui.py": {
+      "sha256": "bf3afe6da66e3bee8fd3fd5756a01143e03b70d6db8181dfa2d0e895d20d4980",
+      "bytes": 4580
+    },
+    "test/test_place_transfer_search.py": {
+      "sha256": "09dacf96bba233a96404215299c4481c4fe5526962061469eea742519dd47aad",
+      "bytes": 3699
+    },
+    "test/test_placement_footprint.py": {
+      "sha256": "21867b35b7da29f0910429317d441c4f3d7472723aeb73ad85c718f758e69c6f",
+      "bytes": 2262
+    },
+    "test/test_planning.py": {
+      "sha256": "6bff185343ab08277e9109305e0219a8104c86b05acd4d18b91288853878fd94",
+      "bytes": 6411
+    },
+    "test/test_pose_arrival.py": {
+      "sha256": "dab6a528c57c3ffb1885fd1b90ac7a124b0a321e4df7692dd7303289b4eeb312",
+      "bytes": 8536
+    },
+    "test/test_pose_handoff.py": {
+      "sha256": "a800aa70713d1bff787feb08414d73323dba1a1af3c95ca37aa77d16b206973c",
+      "bytes": 3162
+    },
+    "test/test_prepare.py": {
+      "sha256": "b6c10bd0daf2078c61d1e027aa813e716253b0b26b4488c8d84f6f5471718847",
+      "bytes": 1119
+    },
+    "test/test_prepared_return.py": {
+      "sha256": "927174f43db5dbb9bea3ef4a81ddde220d7cfc0ef104f6de28b95a68879dbe82",
+      "bytes": 875
+    },
+    "test/test_recorded_jaw_advisory.py": {
+      "sha256": "ed570791f14f4a820440da22f1a160e03c367c57672a3e6400a3585183b0e0b4",
+      "bytes": 3778
+    },
+    "test/test_recorded_timing.py": {
+      "sha256": "7b8daac976aefb4ec98067ad1643053834a9265bf2877caada3b35268436eed2",
+      "bytes": 6256
+    },
+    "test/test_reset_recovery.py": {
+      "sha256": "29c1f251a6db638fcffba3c71ab79f427ff7fb17d984cc47874f230f6524b26b",
+      "bytes": 7394
+    },
+    "test/test_right_execution.py": {
+      "sha256": "a3b034c72b184697f669e9e1b3c7c53b652c3411be828b3f7e7887001cfadfb6",
+      "bytes": 17675
+    },
+    "test/test_segmentation_display.py": {
+      "sha256": "8341285d8e18038c88af793fc8a061d953dfc8473637a642d5f97db840c1d466",
+      "bytes": 985
+    },
+    "test/test_selection.py": {
+      "sha256": "94054184ebddc018ae26a816911b940c7b31a3a3e521699047508b6afe07f5b0",
+      "bytes": 1692
+    },
+    "test/test_semantic_placement.py": {
+      "sha256": "dc0199f4c24135144e0959c5120fe6ecbdbfca55e1a9157811cbcd422cc71234",
+      "bytes": 4032
+    },
+    "test/test_smooth_following.py": {
+      "sha256": "ff60acdba518dbcd35520e47602f1f45a73e9efb3136587b0a53bac497a8bacf",
+      "bytes": 750
+    },
+    "test/test_speed_profile.py": {
+      "sha256": "c9214899d0249682549423b5bd1bd82f0f56735f8853852769cf6f8de0950798",
+      "bytes": 4043
+    },
+    "test/test_standalone_place.py": {
+      "sha256": "df74e648194523e36fd720b6a0dce61739f57577da1886b205063ed9c4d9a821",
+      "bytes": 3871
+    },
+    "test/test_step_posture.py": {
+      "sha256": "105e1b002d7eea00dfac0721585bf1239cbd14e532555099027e191122e2b60a",
+      "bytes": 1827
+    },
+    "test/test_surface_patches.py": {
+      "sha256": "ebf1de12143606dd8e0192664e54e96a6e6551cb0bd0848b9a736851689949ec",
+      "bytes": 1818
+    },
+    "test/test_surface_support.py": {
+      "sha256": "cae9d01082cbbc188e66d145563f3dbb7fb8ca3173c1fbc849887e743c9386a0",
+      "bytes": 3552
+    },
+    "test/test_sync_session.py": {
+      "sha256": "505adbf76b844292afa6646e284ecdc7e27ccda1a9ee45c3f21deaca87aa7a68",
+      "bytes": 3022
+    },
+    "test/test_target_offsets.py": {
+      "sha256": "c6a30e9ad83d20258c8ed4feaa4c2ca4e1db2298be672b7262469942758b45f0",
+      "bytes": 4076
+    },
+    "test/test_task_flow.py": {
+      "sha256": "6d98f3a4be5700228bb7c263532b7786bfa654c068e3d85a96cd7db5613deea6",
+      "bytes": 3415
+    },
+    "test/test_task_pause.py": {
+      "sha256": "b8a8f1819ff3f2394e080f10be1114a19d65cff9852caf63744bf3ab4fbcf185",
+      "bytes": 10383
+    },
+    "test/test_task_recognition.py": {
+      "sha256": "d6da5f0579877c1c3ae453a7a852c24ce694ba5ad45a20f3dd1dd237301554a9",
+      "bytes": 3750
+    },
+    "test/test_teaching.py": {
+      "sha256": "2cb023855ae7833c41ad71282bd38f9ba51644f140218b39321c606a99b8ff14",
+      "bytes": 5271
+    },
+    "test/test_teaching_enable.py": {
+      "sha256": "16ad254c4ed909d9c622edf25a62e2d6a46344690a53056d5794c758b195e657",
+      "bytes": 4884
+    },
+    "test/test_teaching_gripper_follow.py": {
+      "sha256": "4a23217d3e648c85d2914f05759190fe62c4a6be2e80409be677e29d74d4dd3c",
+      "bytes": 1873
+    },
+    "test/test_teaching_output.py": {
+      "sha256": "f47f223414931e7d92e7c4fb830542149a2fe3c19eb03cb9ae1f7e9ac965afd1",
+      "bytes": 4050
+    },
+    "test/test_teaching_sync.py": {
+      "sha256": "9d2b69d439999013e40e6de42129d94b8b91f5455bf93279ef4488606f1b896b",
+      "bytes": 2911
+    },
+    "test/test_teaching_sync_executor.py": {
+      "sha256": "b8caa6c28ac2b9242da5885a8325a4c330608be3cfaec9bea3545dc7df161dc9",
+      "bytes": 2557
+    },
+    "test/test_teaching_tracks.py": {
+      "sha256": "5e59fa4f71006d82363955679161a4c267edb4325e1ab8bf7b29c2bc4f7b50e4",
+      "bytes": 9263
+    },
+    "test/test_transfer_speed.py": {
+      "sha256": "11d1d1dfdb744dca5c8fe56a5bf60c23be769fc628209bcf59aaefec2b1f9e89",
+      "bytes": 2765
+    },
+    "test/test_unregistered.py": {
+      "sha256": "58ac887528e354948f2f41734a8e1b1d463c2c577aff02a480e7e7c69e350c0d",
+      "bytes": 5130
+    },
+    "test/test_usability.py": {
+      "sha256": "98aba81f5971c8e9dd51e8110b0986a0446cf392071e0e6cb5f7cca65180e68e",
+      "bytes": 3074
+    },
+    "test/test_usability_ui.py": {
+      "sha256": "b1ee006522ac53577653f6ab5cdbd6cca47fe6a8b25e5fe23454c7aa3814c996",
+      "bytes": 2426
+    },
+    "test/test_visible_surface.py": {
+      "sha256": "11fd9dd52a6651efc930fff3ffc38618785a02c6f9750e99471d5beeffa5321d",
+      "bytes": 2963
+    },
+    "test/test_waypoint_picker.py": {
+      "sha256": "6efa2655eade917245b66922d73c0a094078fe5c00aecf409007d0d18ca24299",
+      "bytes": 2907
+    },
+    "urdf/robot_v3_1.srdf": {
+      "sha256": "31d787a5dc2e616c1daf5820c1a75c420a8719cca578e40428e1cfad47c78a04",
+      "bytes": 4890
+    },
+    "urdf/robot_v3_1.urdf": {
+      "sha256": "dd0315fd48cb0d3ba7a866399570ab1d600779823c916184d2b216a0017674b1",
+      "bytes": 58001
+    },
+    "urdf/robot_v3_1_simplified.urdf": {
+      "sha256": "118ba602bd1b0a0964d6d149d095f0825231613218faf7b38f08b35742e72e17",
+      "bytes": 33399
+    }
+  },
+  "publication_overrides": {
+    "README.md": "Replaced legacy 306 landing page; original retained in docs.",
+    "test/test_unregistered.py": "Updated regression expectation for partial RGB-D bottle support."
+  },
+  "excluded": [
+    "models",
+    "data",
+    "sessions",
+    "caches",
+    "logs",
+    "backups"
+  ],
+  "note": "Source snapshot; external runtime dependencies and service extensions documented separately. Not a standalone offline installer."
+}

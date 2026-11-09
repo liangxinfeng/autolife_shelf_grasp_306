@@ -23,15 +23,9 @@ class Camera:
     def run(self):
         consumers=[]
         try:
-            source=next((Path(self.cfg['vendor_python_path'])/'autolife_robot_sdk/utils').glob('camera_shm*.so'))
-            spec=importlib.util.spec_from_file_location('camera_shm',source)
-            mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
-            for suffix in ('rgbd_head_color','rgbd_head_depth'):
-                opts={key:f'/{prefix}_{suffix}' for key,prefix in [
-                    ('data_shm_name','camera_image_buffer'),('meta_shm_name','camera_metadata_struct'),
-                    ('read_mutex_name','read_mutex_lock'),('write_lock_name','write_data_lock'),
-                    ('writer_queue_name','writer_queue_sem'),('intrinsics_shm_name','camera_intrinsics_struct')]}
-                consumers.append(mod.SHMCameraFrameConsumer({'selected_protocol':'v1','protocols':{'v1':opts}},name='shelf_readonly'))
+            from autolife_handeye_calibration_306.camera import Camera as NativeCamera
+            for kind in ('color','depth'):
+                consumers.append(NativeCamera.open_native_camera(self.cfg, kind))
             last=None;intr=None;last_intr=0.;last_preview=0.;cached_depth=None
             while not self.stop.is_set():
                 try:
@@ -79,3 +73,4 @@ class Camera:
                 except Exception:pass
 
     def close(self):self.stop.set();self.thread.join(2.)
+

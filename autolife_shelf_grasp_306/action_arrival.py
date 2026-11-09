@@ -5,6 +5,73 @@ OPENING_RESIDUAL_DEG = 5.0
 OPENING_SETTLE_SEC = .5
 
 
+def open_endpoint_observation(bridge,targets):
+    """Eligible stationary open-region feedback, otherwise None; no mutation."""
+    from control_center_joint_control.joint_definitions import GRIPPER_JOINTS, JOINT_LIMITS
+    state=bridge._action_state
+    if state is None:return None
+    if not bridge._is_feedback_fresh():return None
+    body=float(bridge.get_parameter('goal_tolerance_deg').value)
+    jaw=float(bridge.get_parameter('gripper_goal_tolerance_deg').value)
+    observed={};exception=False
+    for n,goal in targets.items():
+        actual=float(bridge._current.get(n,float('nan')))
+        detail=getattr(bridge,'_details',{}).get(n,{})
+        speed=float(detail.get('speed',float('nan')))
+        command=float(state['commanded_values'].get(n,float('nan')))
+        if not all(math.isfinite(v) for v in (actual,goal,speed,command)) or detail.get('communication_lost',True):return None
+        error=abs(actual-goal);observed[n]=actual
+        low=JOINT_LIMITS[n][0] if n in GRIPPER_JOINTS else None
+        full_open=low is not None and low<=goal<=low+OPENING_RESIDUAL_DEG
+        if full_open:
+            start=float(state.get('start_values',{}).get(n,float('nan')))
+            # A small movement entirely inside the open-end region is encoder
+            # alignment, not proof of grasp/contact. Never accept an invalid
+            # start, a yet-unissued goal, or feedback outside the endpoint band.
+            if not math.isfinite(start) or start<low-1.e-6 or abs(command-goal)>.05:return None
+            if not low-jaw<=actual<=low+OPENING_RESIDUAL_DEG or error>OPENING_RESIDUAL_DEG or abs(speed)>5.:return None
+            exception=exception or error>jaw or abs(speed)>2.
+        elif error>(jaw if n in GRIPPER_JOINTS else body) or abs(speed)>2.:
+            return None
+    return observed if exception else None
+
+
+def settled_full_open_arrival(bridge, targets, *, channel='preparation'):
+    """Confirm the open-end region using distinct encoder samples.
+
+    Small initial opening corrections need not contain a ten-degree release.
+    DM gripper speed telemetry is quantized (the observed stationary grippers
+    reported up to 4.41 deg/s), so full-open jaws additionally use a bounded
+    position window. Closing and intermediate openings retain normal bounds.
+    Recorded goals are measured encoder values, not ideal endpoint commands:
+    both 10 -> 12.89 and 12.89 -> 10 can represent the same open endpoint.
+    Apply the same bounded open-region contract in preparation and final
+    arrival. Both goal AND actual must lie in that region; partial/closing
+    targets outside it still require ordinary precision. No force/contact
+    completion is inferred. This function never modifies targets, commands,
+    or trajectory time.
+    """
+    state=bridge._action_state
+    if state is None:return False
+    slot='full_open_arrival_'+channel
+    def reject():
+        state.pop(slot,None)
+        return False
+    observed=open_endpoint_observation(bridge,targets)
+    if observed is None:return reject()
+    stamp=float(getattr(bridge,'_feedback_monotonic',float('nan')))
+    if not math.isfinite(stamp):return reject()
+    key=(state['loop_index'],state['frame_index'],tuple(sorted(targets.items())))
+    stable=state.get(slot)
+    if (stable is None or stable['key']!=key or stamp<stable['last'] or stamp-stable['last']>.25
+            or any(abs(v-stable['anchor'][n])>.4 for n,v in observed.items())):
+        state[slot]=dict(key=key,start=stamp,last=stamp,count=1,anchor=observed)
+        return False
+    if stamp>stable['last']:
+        stable['last']=stamp;stable['count']+=1
+    return stable['count']>=4 and stamp-stable['start']>=OPENING_SETTLE_SEC
+
+
 def opening_modes(state, targets, jaw):
     """Classify release and its unchanged continuation, never ordinary closing."""
     from control_center_joint_control.joint_definitions import GRIPPER_JOINTS

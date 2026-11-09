@@ -1,0 +1,11 @@
+--- a/process_worker.py
++++ b/process_worker.py
+@@ -5,6 +5,8 @@
+ 
+ 
+ def run_mod_motor_mp_control(TOPIC_NODE_ID, config, shared_state_manager, mod_names, publish_whole_body, shutdown_event):
++    from autolife_robot_arm.grasp_feedback_refresh import install
++    install(mod_names, TOPIC_NODE_ID)
+     from autolife_robot_arm.arm_vr_control_service import mod_motor_mp_control
+     mod_motor_mp_control(TOPIC_NODE_ID, config, shared_state_manager, mod_names, publish_whole_body, shutdown_event)
+ 

@@ -3,8 +3,7 @@ import json, math
 from pathlib import Path
 import yaml
 
-SOURCE=Path('/home/ubuntu/ros2_ws/src/autolife_robot_control_center')
-NAV=SOURCE/'control_center_navigation'
+NAV=Path('/home/ubuntu/ros2_ws/src/control_center_navigation')
 ACTIVE=NAV/'config/active_map.yaml'
 SUCCESS={'succeeded','short_distance_succeeded'}
 FAILED={'failed','rejected','canceled','cancelled','paused','undock_failed'}
@@ -39,7 +38,7 @@ def active_map():
 
 def map_catalog():
     found={}
-    for directory in (SOURCE/'multi_lidar_slam/maps',NAV/'maps'):
+    for directory in (NAV/'maps',):
         for p in directory.glob('*.yaml'):
             try:
                 d=yaml.safe_load(p.read_text());im=Path(d['image'])
