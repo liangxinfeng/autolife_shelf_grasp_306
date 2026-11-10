@@ -139,7 +139,7 @@ class VendorGraspPlanner(Planner):
             position=self.anchor[:3,:3].T@(wrist.translation-self.anchor[:3,3])
         return position+rotation@tcp,rotation.copy()
 
-    def plan(self, source, tcp, center, product):
+    def configure_source(self, source):
         self.source = dict(source)
         self.anchor = self.fk.fk(BASE, TORSO, source)
         tree = ET.parse(self.cfg['urdf_path']).getroot()
@@ -179,6 +179,12 @@ class VendorGraspPlanner(Planner):
                     Rotation.from_matrix(expected[:3, :3].T @
                         Rotation.from_quat(actual[3:]).as_matrix()).magnitude() > 1e-6):
                 raise ValueError('原厂IK链顺序或模型坐标不一致，未生成轨迹')
+        except BaseException:
+            self.close();raise
+
+    def plan(self, source, tcp, center, product):
+        self.configure_source(source)
+        try:
             plan = super().plan(source, tcp, center, product)
         except BaseException:
             self.close();raise

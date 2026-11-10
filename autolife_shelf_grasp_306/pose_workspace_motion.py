@@ -9,6 +9,15 @@ def source_changed(current,source):
 def begin(engine,token,values,source,speed=.4,profile=''):
     values=checked_targets(values)
     if engine.moving():raise ValueError('当前动作尚未结束')
+    from control_center_joint_control.joint_definitions import group_joint_names
+    arms=set(group_joint_names('left_arm')+group_joint_names('right_arm'))
+    if len(values)>1 and set(values)<=arms and not profile:
+        # IK/镜像的多关节目标必须共用进度；不能走各关节独立追目标的入口。
+        from .pose_execution_profile import pose_record
+        record=pose_record({**source,**values},source,speed*100.,'末端/镜像调节')
+        engine.execute(token,record,keep_session=True)
+        engine.job.update(selected_targets=dict(values),selected_source=dict(source))
+        return
     engine.ensure();engine.panel.setEnabled(False)
     engine.bridge.outcome=None
     engine.job=dict(token=token,manual=True,targets=values,source=dict(source),speed=speed,
@@ -38,12 +47,15 @@ def advance(engine):
                 from rclpy.parameter import Parameter
                 results=b.set_parameters([Parameter('goal_tolerance_deg',value=.2)])
                 if not all(r.successful for r in results):fail('手动关节精度参数未加载')
-                engine.sync_exit_ok=True;engine.sync_session=ManualHoldSession(b);engine.sync_session.begin();j['phase']='sync'
+                engine.sync_exit_ok=True;engine.sync_session=ManualHoldSession(b,**({'preserve_gripper_targets':True} if getattr(engine,'gripper_targets',{}) else {}));engine.sync_session.begin();j['phase']='sync'
         elif j['phase'] in ('sync','submit'):
             if j['phase']=='sync' and not engine.sync_session.poll():return
             engine.manual_session=True
             if not b._is_feedback_fresh():fail('反馈中断，未发送调节目标')
             if source_changed(b._current,j['source']):fail('使能后姿态变化，请重新取当前姿态')
+            from control_center_joint_control.joint_definitions import GRIPPER_JOINTS
+            if set(j['targets'])<=set(GRIPPER_JOINTS):
+                j['phase']='jaw';return
             commands=operator_commands(j['targets'],b._current,j['speed'],j['profile'])
             if any(c['group']=='leg_waist' for c in commands):
                 r=b._set_leg_waist_enabled(SetBool.Request(data=True),SetBool.Response())
@@ -57,6 +69,9 @@ def advance(engine):
                 b._on_apply(String(data=json.dumps(cmd)))
                 if cmd['group'] not in b._active_goals:fail('调节目标未被接收：'+b._last_event)
             j['phase']='moving'
+        elif j['phase']=='jaw':
+            from .pose_gripper_intent import manual_tick
+            manual_tick(engine)
         elif j['phase']=='moving':
             if not b._hardware_ready or not b._is_feedback_fresh():fail('控制权或关节反馈失效')
             if b._active_goals or not engine.settled():j['stable']=None;return

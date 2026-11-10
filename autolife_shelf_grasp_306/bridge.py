@@ -6,6 +6,10 @@ from autolife_handeye_calibration_306.bridge import CalibrationBridge
 class GraspBridge(CalibrationBridge):
     last_lock_reason = ''
 
+    def snapshot(self):
+        from .feedback_state import checked_snapshot
+        return checked_snapshot(self)
+
     def _advance_hardware_prepare(self):
         # 抓取、复位与示教统一使用同一准备握手；短暂使能回包变化时不发动作。
         from .teaching_enable import wait_for_enable_feedback
@@ -26,10 +30,11 @@ class GraspBridge(CalibrationBridge):
         使用正式关节桥检查保持使能状态。已检查轨迹限定膝踝固定、
         另一臂和头部固定，仅允许所选手臂及规划中的腰部参与。
         """
-        if (plan.get('execution_backend')!='vendor_trajectory_v1' or
-                plan.get('kind') in ('prepare','place','observe')):
-            raise ValueError('腰部抓取入口只接受已检查的原厂抓取轨迹')
-        from .vendor_grasp_trajectory import validate_blocks
+        if plan.get('execution_backend')=='vendor_place_trajectory_v1' and plan.get('kind')=='place':
+            from .vendor_place_trajectory import validate_blocks
+        elif plan.get('execution_backend')=='vendor_trajectory_v1' and plan.get('kind') not in ('prepare','place','observe'):
+            from .vendor_grasp_trajectory import validate_blocks
+        else:raise ValueError('腰部入口只接受已检查的原厂抓取或放置轨迹')
         validate_blocks(plan)
         from control_center_joint_control.joint_bridge import JointBridge
         from std_srvs.srv import SetBool

@@ -9,6 +9,7 @@ from .motion import configure_grasp_path,cartesian_speed_profile
 from .planning import IKFailure,CollisionFailure
 from .demo_config import require_placeable,footprint_radius,carried_height
 from .object_extent import bbox
+from .placement_interior import InteriorPreference,interior_rank
 
 # Observed obstacles already include 10mm depth padding. Keep 5mm additional
 # exact-shape clearance, instead of stacking 25mm padding plus another 10mm.
@@ -85,6 +86,16 @@ def box_separations(rotation,position,low,high,rotations,centers,half_extents):
     return np.linalg.norm(np.maximum(np.abs(center)-extent-half_extents,0.),axis=1)
 
 
+def geometry_box_separations(shape_rotations,shape_positions,lows,highs,rotations,centers,half_extents):
+    """一次计算全部连杆×桌面/障碍的同一保守下界，精确距离检查保持不变。"""
+    inverse=np.swapaxes(rotations,1,2)
+    transform=inverse[None,:,:,:]@shape_rotations[:,None,:,:]
+    center=np.einsum('tij,ntj->nti',inverse,shape_positions[:,None,:]-centers[None,:,:])
+    center+=np.einsum('ntij,nj->nti',transform,(lows+highs)*.5)
+    extent=np.einsum('ntij,nj->nti',np.abs(transform),(highs-lows)*.5)
+    return np.linalg.norm(np.maximum(np.abs(center)-extent-half_extents[None,:,:],0.),axis=2)
+
+
 def remove_robot_points(planner,q,tcp,product,points):
     """Exclude robot/held-bottle returns before environmental checks."""
     import pinocchio as pin
@@ -142,6 +153,16 @@ class TableGuard:
         for box in table.get('obstacles',[]):
             low=np.array(box['minimum']);high=np.array(box['maximum'])
             self.obstacles.append((fcl.Box(*map(float,high-low)),(low+high)/2,(high-low)/2))
+        self.geometry_indices=[i for i,obj in enumerate(planner.guard.kin.geom_model.geometryObjects)
+            if getattr(planner,'placement_whole_body_check',False) or obj.name.startswith('Link_'+planner.cfg['arm'].title())]
+        self.geometry_lows=np.array([planner.guard.boxes[i][0] for i in self.geometry_indices])
+        self.geometry_highs=np.array([planner.guard.boxes[i][1] for i in self.geometry_indices])
+        self.checked_cache=set()
+        self._environment_key=None
+        self._sphere_shape=fcl.Sphere(.045)
+        self._distance_request=fcl.DistanceRequest()
+        self._held_shape=(fcl.Box(*map(float,bbox(product)[1])) if 'bbox_axes_torso' in product
+                          else fcl.Cylinder(footprint_radius(product),carried_height(product)))
 
     def check_support(self,q):
         if self.support is None:return
@@ -152,7 +173,7 @@ class TableGuard:
     def support_pose(self,position,rotation,q):
         if self.support is None:return True
         from .placement_support import supported,footprint_outline
-        ground=self.p.fk.fk('Link_Zero_Point',TORSO,q)
+        ground=(self.p.anchor if getattr(self.p,'anchor',None) is not None else self.p.fk.fk('Link_Zero_Point',TORSO,q))
         outline=footprint_outline(self.product,ground[:3,:3]@rotation@self.grasp_rotation.T)
         return supported(*self.support,ground[:3,:3]@position+ground[:3,3],outline)
 
@@ -160,18 +181,27 @@ class TableGuard:
         # Planner.check already updates the same collision model placements.
         import pinocchio as pin
         from autolife_handeye_calibration_306.core import ARMS,BODY,NECK
+        key=(carrying,tuple(sorted(q.items())))
+        if key in self.checked_cache:return
         p=self.p;kin=p.guard.kin
         raw=kin.q_from_feedback({'leg_waist':[q[n] for n in BODY],'neck':[q[n] for n in NECK],
             'left_arm':[q[n] for n in ARMS['left']],'right_arm':[q[n] for n in ARMS['right']]},clip=False)
         pin.forwardKinematics(kin.model,kin.data,raw);pin.updateFramePlacements(kin.model,kin.data)
         pin.updateGeometryPlacements(kin.model,kin.data,kin.geom_model,kin.geom_data,raw)
         root=kin.data.oMf[kin.model.getFrameId('Link_Zero_Point')]
-        table_rotation=root.rotation@self.rotation;table_center=root.translation+root.rotation@self.center
-        targets=[(self.box,table_rotation,table_center,self.half_extent,.001,'放置轨迹与已识别桌面相交')]
-        targets.extend((shape,root.rotation,root.translation+root.rotation@center,half,CLUTTER_MARGIN_M,
-                        f'放置轨迹接近桌面已有物品#{i+1}') for i,(shape,center,half) in enumerate(self.obstacles))
-        rotations=np.array([t[1] for t in targets]);centers=np.array([t[2] for t in targets])
-        extents=np.array([t[3] for t in targets]);margins=np.array([t[4] for t in targets])
+        environment_key=(root.rotation.tobytes(),root.translation.tobytes())
+        if environment_key!=self._environment_key:
+            # 同一规划内桌面/障碍不动；只有根坐标变换改变才重新构造环境数据。
+            table_rotation=root.rotation@self.rotation;table_center=root.translation+root.rotation@self.center
+            targets=[(self.box,table_rotation,table_center,self.half_extent,.001,'放置轨迹与已识别桌面相交')]
+            targets.extend((shape,root.rotation,root.translation+root.rotation@center,half,CLUTTER_MARGIN_M,
+                            f'放置轨迹接近桌面已有物品#{i+1}') for i,(shape,center,half) in enumerate(self.obstacles))
+            rotations=np.array([t[1] for t in targets]);centers=np.array([t[2] for t in targets])
+            extents=np.array([t[3] for t in targets]);margins=np.array([t[4] for t in targets])
+            transforms=[self.fcl.Transform3f(t[1],t[2]) for t in targets]
+            self._environment=(targets,rotations,centers,extents,margins,transforms)
+            self._environment_key=environment_key
+        targets,rotations,centers,extents,margins,transforms=self._environment
         def test(shape,rotation,position,bounds=None,label='夹爪/饮料',scope='all'):
             if bounds is None:
                 shape.computeLocalAABB();bounds=(np.array(shape.aabb_local.min_),np.array(shape.aabb_local.max_))
@@ -183,36 +213,46 @@ class TableGuard:
                 obstacle,rot,center,half,margin,message=targets[index]
                 self.exact_distance_calls+=1
                 distance=self.fcl.distance(shape,self.fcl.Transform3f(rotation,position),obstacle,
-                    self.fcl.Transform3f(rot,center),self.fcl.DistanceRequest(),self.fcl.DistanceResult())
+                    transforms[index],self._distance_request,self.fcl.DistanceResult())
                 if distance<margin:raise CollisionFailure(f'{message}（{label}，间距{distance*1000:.1f}mm）')
-        for i,obj in enumerate(kin.geom_model.geometryObjects):
-            if obj.name.startswith('Link_'+p.cfg['arm'].title()):
-                t=kin.geom_data.oMg[i];test(obj.geometry,t.rotation,t.translation,p.guard.boxes[i],obj.name)
+        placements=[kin.geom_data.oMg[i] for i in self.geometry_indices]
+        if placements:
+            bounds=geometry_box_separations(np.array([t.rotation for t in placements]),
+                np.array([t.translation for t in placements]),self.geometry_lows,self.geometry_highs,
+                rotations,centers,extents)
+            possible=np.flatnonzero(np.any(bounds<=margins[None,:]+1e-9,axis=1))
+            self.broadphase_skips+=(len(placements)-len(possible))*len(targets)
+            for k in possible:
+                i=self.geometry_indices[k];obj=kin.geom_model.geometryObjects[i];t=placements[k]
+                test(obj.geometry,t.rotation,t.translation,p.guard.boxes[i],obj.name)
         wrist=kin.data.oMf[p.guard.frame];center=wrist.translation+wrist.rotation@self.tcp
         physical_center=center-wrist.rotation@np.asarray(self.product.get('object_center_offset_wrist',[0.,0.,0.]))
         if self.jaw_envelope is None:
-            test(self.fcl.Sphere(.045),np.eye(3),physical_center,label='夹爪保守包络')
+            test(self._sphere_shape,np.eye(3),physical_center,label='夹爪保守包络')
         else:
             shape,offset=self.jaw_envelope
             # Correct thickness only for support-plane contact. Preserve the
             # previous clutter guard, in addition to the complete URDF meshes;
             # do not turn the full opening sweep into occupied solid space.
             test(shape,wrist.rotation,wrist.translation+wrist.rotation@offset,label='夹爪张开包络',scope='table')
-            test(self.fcl.Sphere(.045),np.eye(3),physical_center,label='夹爪障碍包络',scope='clutter')
+            test(self._sphere_shape,np.eye(3),physical_center,label='夹爪障碍包络',scope='clutter')
         if carrying:
             if 'bbox_axes_torso' in self.product:
                 rotation,extent=held_box_rotation(wrist.rotation,self.grasp_rotation,self.product)
-                test(self.fcl.Box(*map(float,extent)),rotation,center)
+                test(self._held_shape,rotation,center)
+                self.checked_cache.add(key)
                 return
             torso=kin.data.oMf[kin.model.getFrameId(TORSO)]
             up=np.asarray(p.cfg['up_torso']);_,R=p.pose(q,self.tcp)
-            axis=torso.rotation@(R@self.grasp_rotation.T@up);axis/=np.linalg.norm(axis)
+            reference=p.anchor[:3,:3] if getattr(p,'anchor',None) is not None else torso.rotation
+            axis=reference@(R@self.grasp_rotation.T@up);axis/=np.linalg.norm(axis)
             other=np.array([1.,0.,0.]) if abs(axis[0])<.9 else np.array([0.,1.,0.])
             x=np.cross(other,axis);x/=np.linalg.norm(x);y=np.cross(axis,x)
-            test(self.fcl.Cylinder(footprint_radius(self.product),carried_height(self.product)),np.column_stack([x,y,axis]),center)
+            test(self._held_shape,np.column_stack([x,y,axis]),center)
+        self.checked_cache.add(key)
 
 
-def placement_candidates(positions,current,limit=10,spacing=.045,clearance=None,cover_surface=False):
+def placement_candidates(positions,current,limit=10,spacing=.045,clearance=None,cover_surface=False,edge_margins=None,preferred_margin=.08):
     """Spatially diverse, near-current candidates without a hard-coded XY goal."""
     positions=np.asarray(positions,float).reshape(-1,3)
     if not len(positions):return []
@@ -225,6 +265,12 @@ def placement_candidates(positions,current,limit=10,spacing=.045,clearance=None,
             raise ValueError('放置候选空间数据无效')
         # Ranking only: narrow/borderline sites stay available as fallbacks.
         score+=.20*np.clip((.012-clearance)/.012,0.,1.)
+    if edge_margins is not None:
+        margins=np.asarray(edge_margins,float)
+        if margins.shape!=(len(positions),) or not np.isfinite(margins).all():
+            raise ValueError('桌边余量数据无效')
+        # 仅改变排序：8cm舒适余量达标后仍优先近点；边缘可达点保留为备选。
+        score+=4.*np.maximum(0.,preferred_margin-margins)
     order=np.argsort(score,kind='stable');selected=[]
     if cover_surface:
         # Keep the best local point, then cover separate tabletop regions.
@@ -276,7 +322,7 @@ def upright_heading(actual,reference,up):
     return Rotation.from_rotvec(up*np.deg2rad(yaw)).as_matrix()@reference,yaw
 
 
-def rank_place_ik(planner,source,tcp,candidates,grasp_R,up,product,settings,table_guard,deadline,diagnostics,fallback_candidates=(),alternative_seeds=(),allow_detour=False,free_heading=False):
+def rank_place_ik(planner,source,tcp,candidates,grasp_R,up,product,settings,table_guard,deadline,diagnostics,fallback_candidates=(),alternative_seeds=(),allow_detour=False,free_heading=False,interior=None,ground=None):
     """Bounded endpoint screening before any expensive smoothed path checks."""
     from_angles=np.array([source[n] for n in planner.names]);ranked=[];blocked=[]
     attempts=0;started=time.monotonic()
@@ -302,6 +348,10 @@ def rank_place_ik(planner,source,tcp,candidates,grasp_R,up,product,settings,tabl
                 screening_stage='landing_ik'
                 landing=planner.solve(above,tcp,target,desired,True,global_goal=True,limit_deg=5.)
                 if hasattr(table_guard,'check_support'):table_guard.check_support(landing)
+                edge={}
+                if interior is not None:
+                    margin=float(interior.margins([planner.pose(landing,tcp)[0]],ground)[0])
+                    edge=dict(edge_margin_m=margin,edge_shortfall_m=float(interior.shortfalls(margin)))
                 for screening_stage,q in (('above_collision',above),('landing_collision',landing)):
                     planner.check(q,tcp,True,product);table_guard.check(q,True)
                 # Cheap rejection only; EVERY smoothed-curve state is still
@@ -314,7 +364,7 @@ def rank_place_ik(planner,source,tcp,candidates,grasp_R,up,product,settings,tabl
                 score=float(np.linalg.norm(a-from_angles)+.5*np.linalg.norm(b-a)+.15*abs(yaw))
                 if not any(np.linalg.norm(target-r['target'])<1e-5 and
                            max(abs(above[n]-r['above'][n]) for n in planner.names)<1. for r in ranked):
-                    ranked.append(dict(target=target,yaw=yaw,rotation=desired,above=above,score=score,seed_index=seed_index))
+                    ranked.append(dict(target=target,yaw=yaw,rotation=desired,above=above,score=score,seed_index=seed_index,**edge))
                 if len(ranked)>=6:break
             except (IKFailure,CollisionFailure,ValueError) as exc:
                 diagnostics.append(dict(phase='endpoint_ik',screening_stage=screening_stage,target=target.tolist(),yaw=yaw,seed_index=seed_index,error=str(exc)))
@@ -324,12 +374,12 @@ def rank_place_ik(planner,source,tcp,candidates,grasp_R,up,product,settings,tabl
                     score=float(np.linalg.norm(np.array([above[n] for n in planner.names])-from_angles)+.15*abs(yaw))
                     if not any(np.linalg.norm(target-r['target'])<.03 for r in blocked):
                         blocked.append(dict(target=target,yaw=yaw,rotation=desired,above=above,score=score,
-                                            seed_index=seed_index,needs_detour=True))
+                                            seed_index=seed_index,needs_detour=True,**edge))
         if ranked or time.monotonic()>min(deadline,started+3.5):break
     diagnostics.append(dict(phase='ik_screen_summary',attempts=attempts,feasible=len(ranked),
                             detour_endpoints=len(blocked),
                             seconds=round(time.monotonic()-started,3)))
-    return (sorted(ranked,key=lambda x:x['score'])+sorted(blocked,key=lambda x:x['score']))[:6]
+    return (sorted(ranked,key=interior_rank)+sorted(blocked,key=interior_rank))[:6]
 
 
 def checked_transfer_approach(planner,source,goal,tcp,up,check):
@@ -385,17 +435,23 @@ def plan_place(planner,source,tcp,grasp,points,table,settings):
     if not len(positions):
         planner.place_diagnostics=[selection_diagnostic]
         raise ValueError('桌面空位可支撑物品，但夹爪伸入空间不足；请调整观察位置或清理周边物品')
-    grasp_R=planner.pose(grasp['segments'][1]['waypoints'][-1],tcp)[1]
+    grasp_R=(planner.placement_grasp_rotation(grasp) if hasattr(planner,'placement_grasp_rotation') else planner.pose(grasp['segments'][1]['waypoints'][-1],tcp)[1])
     table_guard=TableGuard(planner,table,product,tcp,grasp_R)
-    current,_=planner.pose(source,tcp);candidates=placement_candidates(positions,current,clearance=clearance)
-    fine=placement_candidates(positions,current,limit=50,spacing=.015,clearance=clearance,cover_surface=True)
+    interior=InteriorPreference(table,footprint_radius(product),settings.get('edge_margin_m',.08))
+    margins=interior.margins(positions,ground)
+    selection_diagnostic.update(preferred_edge_margin_m=interior.preferred,
+                                maximum_available_edge_margin_m=float(np.max(margins)))
+    current,_=planner.pose(source,tcp)
+    preference=dict(edge_margins=margins,preferred_margin=interior.preferred)
+    candidates=placement_candidates(positions,current,clearance=clearance,**preference)
+    fine=placement_candidates(positions,current,limit=50,spacing=.015,clearance=clearance,cover_surface=True,**preference)
     fine=[p for p in fine if all(np.linalg.norm(p-c)>.008 for c in candidates)]
     started=time.monotonic();deadline=started+8.;last='没有可用放置路径';planner.place_diagnostics=[selection_diagnostic];best_progress=-1
     carry_waypoints=grasp['segments'][-1]['waypoints']
     alternatives=[]
     if len(carry_waypoints)>=2:
         alternatives=[{**source,**{n:carry_waypoints[-2][n] for n in planner.names}}]
-    ranked=rank_place_ik(planner,source,tcp,candidates,grasp_R,up,product,settings,table_guard,deadline,planner.place_diagnostics,fine,alternatives,allow_detour=True,free_heading=True)
+    ranked=rank_place_ik(planner,source,tcp,candidates,grasp_R,up,product,settings,table_guard,deadline,planner.place_diagnostics,fine,alternatives,allow_detour=True,free_heading=True,interior=interior,ground=ground)
     if not ranked:raise ValueError('桌面有空位，但候选放置姿态未通过可达性或障碍间距检查')
     checked_cache=set()
     approach_cache={}
@@ -459,7 +515,7 @@ def plan_place(planner,source,tcp,grasp,points,table,settings):
                 stages.append((name,phase,waypoints,carrying))
                 if phase=='place_lower':table_guard.check_support(previous)
                 progress+=1
-            end=carry_goal(cfg,previous,planner.names)
+            end=planner.carry_target(previous) if hasattr(planner,'placement_grasp_rotation') else carry_goal(cfg,previous,planner.names)
             return_points=[previous,end] if exit_lift is None else [*stages.pop()[2],end]
             stages.append(('直接收回复位姿态' if exit_lift is None else '连续退出并收回复位姿态','place_return',return_points,False))
             release_start,release_R=planner.pose(return_points[0],tcp)
@@ -478,7 +534,10 @@ def plan_place(planner,source,tcp,grasp,points,table,settings):
                 path=configure_grasp_path(JointPath(planner.names,waypoints),cfg)
                 tcp_samples=[]
                 for values in path.checks():
-                    q={**source,**values};check(q,carrying)
+                    q={**source,**values}
+                    # 原厂执行模式在 finalize_place 对最终线性插值逐0.1度检查，
+                    # 不再先对不会直接执行的PCHIP曲线重复做同一组密集碰撞计算。
+                    if not hasattr(planner,'finalize_place'):check(q,carrying)
                     pos,R=planner.pose(q,tcp)
                     if phase=='place_return':
                         # Until the open fingers have cleared the placed object,
@@ -511,19 +570,30 @@ def plan_place(planner,source,tcp,grasp,points,table,settings):
                            (delta@up>=carried_height(product)/2+.05))
                     uncleared=np.flatnonzero(~clear)
                     transfer_from=float(samples[min(int(uncleared[-1])+1,len(samples)-1)]) if len(uncleared) else 0.
+                if getattr(planner,'placement_whole_body_check',False):
+                    # 原厂整段定时会逐处限制关节速度/曲率加速度，不再叠加旧推进器
+                    # 的全段最慢关节上限；末端接近桌面与退离的局部限速仍保留。
+                    path.max_speed=float(cfg.get('max_joint_speed_deg_s',120.))
                 profile=cartesian_speed_profile(path,samples,tcp_samples,limits)
                 speed_cap=max(v for _,v in profile)
                 route.append({'name':name,'phase':phase,'waypoints':waypoints,'path_speed_cap':speed_cap,
                               'path_speed_profile':profile,
                               'transfer_from_s':transfer_from,
                               'tcp_goal':planner.pose(waypoints[-1],tcp)[0].tolist()})
-            return dict(kind='place',place_protocol_version=3,source_q=source,segments=route,tcp=tcp.tolist(),
+            result=dict(kind='place',place_protocol_version=3,source_q=source,segments=route,tcp=tcp.tolist(),
                 product=product,center=target.tolist(),up_torso=up.tolist(),geometry_version=2,
                 self_collision_checked=True,table_height_checked=True,checked_states=checked,
                 joint_limit_policy=planner.joint_limit_policy,urdf_sha256=planner.fk.sha,
                 table=table,placement_search='endpoint_screen_then_full_path',
                 ik_screened=len(ranked),selected_yaw_deg=yaw,selected_seed_index=choice['seed_index'],
+                preferred_edge_margin_m=interior.preferred,
+                selected_edge_margin_m=float(interior.margins([release_start],ground)[0]),
                 exit_lift_m=exit_lift,seconds=round(time.monotonic()-started,2))
+            if hasattr(planner,'finalize_place'):
+                phase='native_path_check'
+                result=planner.finalize_place(result,source,tcp,grasp,table,settings)
+                result['seconds']=round(time.monotonic()-started,2)
+            return result
         except (IKFailure,CollisionFailure,ValueError) as exc:
             planner.place_diagnostics.append(dict(target=target.tolist(),yaw=yaw,phase=phase,
                 seed_index=choice['seed_index'],exit_lift_m=exit_lift,error=str(exc)))

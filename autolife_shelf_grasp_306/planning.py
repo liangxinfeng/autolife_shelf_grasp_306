@@ -240,10 +240,9 @@ class Planner:
                 center=center-(torso_rotation@np.asarray(self.cfg['up_torso']))*product['height_m']*.5
                 radius+=.015 # allowance for a soft bag; not a swinging-body model
             bottle=fcl.Sphere(radius);transform=fcl.Transform3f(np.eye(3),center)
-            for i,obj in enumerate(kin.geom_model.geometryObjects):
-                if any(obj.name.startswith(prefix) for prefix in self.guard.skip):continue
-                t=kin.geom_data.oMg[i];lo,hi=self.guard.boxes[i];local=t.rotation.T@(center-t.translation)
-                if np.linalg.norm(local-np.clip(local,lo,hi))>radius+.005:continue
+            from .held_broadphase import nearby_geometries
+            for i in nearby_geometries(self.guard,center,radius+.005):
+                obj=kin.geom_model.geometryObjects[i];t=kin.geom_data.oMg[i]
                 distance=fcl.distance(bottle,transform,obj.geometry,fcl.Transform3f(t.rotation,t.translation),fcl.DistanceRequest(),fcl.DistanceResult())
                 if distance<.005:raise CollisionFailure('携带饮料可能碰到机器人：'+obj.name)
 

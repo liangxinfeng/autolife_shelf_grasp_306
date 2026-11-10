@@ -7,8 +7,8 @@ from .sync_session import PositionSyncSession
 
 
 class ManualHoldSession(PositionSyncSession):
-    def __init__(self,node):
-        super().__init__(node)
+    def __init__(self,node,**kwargs):
+        super().__init__(node,**kwargs)
         self.vendor_state=None;self.vendor_stamp=0.;self.verified=False
         self.subscription=node.create_subscription(String,'/robot_state_topic_0_345',self.on_state,10)
 
@@ -22,7 +22,8 @@ class ManualHoldSession(PositionSyncSession):
     def begin(self):
         n=self.node;self.started=time.monotonic();self.future=None;self.accepted_at=None;self.stable=None
         if not n._is_feedback_fresh():raise ValueError('等待本机关节反馈')
-        self.anchor=dict(n._current)
+        from .pose_feedback_read import PoseFeedbackRead
+        self.reader=PoseFeedbackRead(n);self.anchor=None
         # 仅软件标记准备中，不调用旧的逐组电机模式/使能流程，不下发运动。
         n._hardware_enabled=True;n._hardware_ready=False;n._hardware_prepare=None
         n._hardware_unlock_mode='without_reset';n._leg_waist_enabled=False
@@ -37,6 +38,11 @@ class ManualHoldSession(PositionSyncSession):
                 if now-self.started>2.:raise ValueError('原厂保持接口或状态未就绪，未下发目标')
                 return False
             if self.vendor_state!=0:raise ValueError('原厂关节已有控制会话，请先停止其他遥操或复位')
+            if self.anchor is None:
+                self.anchor=self.reader.poll()
+                if self.anchor is None:return False
+                self.reader.close();self.reader=None
+                self.started=now
             self.requested=True;self.future=self.client.call_async(SetBool.Request(data=True));return False
         if not self.future.done():
             if now-self.started>12.:raise ValueError('原厂保持使能超时，已停止此次调节')
@@ -68,10 +74,11 @@ class ManualHoldSession(PositionSyncSession):
             if self.vendor_state!=2 or time.monotonic()-self.vendor_stamp>1.:
                 raise ValueError('原厂保持会话已退出或状态反馈中断，已停止调节')
 
-    def close(self):
-        try:return super().close()
+    def close(self,preserve_grippers=False):
+        try:return super().close(preserve_grippers=preserve_grippers)
         finally:
             self.verified=False
+            if getattr(self,'reader',None):self.reader.close();self.reader=None
             if self.subscription is not None:self.node.destroy_subscription(self.subscription);self.subscription=None
 
 

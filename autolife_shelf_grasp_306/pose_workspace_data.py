@@ -47,10 +47,22 @@ class PoseStore:
         doc=json.loads(self.path.read_text('utf8'))
         if doc.get('version')!=1 or not isinstance(doc.get('poses'),dict):raise ValueError('姿态库格式不正确')
         return {validate_action_name(n):checked_joints(v) for n,v in doc['poses'].items()}
-    def _edit(self,name,values=None,overwrite=False,delete=False):
+    def binding(self,name):
+        if not self.path.exists():return None
+        value=json.loads(self.path.read_text('utf8')).get('visual_bindings',{}).get(name)
+        if value:
+            from .visual_reference import binding
+            return binding(value)
+        return None
+    def _edit(self,name,values=None,overwrite=False,delete=False,visual_binding=None):
         name=validate_action_name(name);self.directory.mkdir(parents=True,exist_ok=True)
         with (self.directory/'.manual-poses.lock').open('a+') as lock:
             fcntl.flock(lock,fcntl.LOCK_EX);records=self.read()
+            bindings=json.loads(self.path.read_text('utf8')).get('visual_bindings',{}) if self.path.exists() else {}
+            bindings.pop(name,None)
+            if visual_binding is not None and not delete:
+                from .visual_reference import binding
+                bindings[name]=binding(visual_binding)
             if delete:
                 if name not in records:raise ValueError('姿态已不存在，请刷新')
                 del records[name]
@@ -60,10 +72,10 @@ class PoseStore:
             tmp=self.path.with_name(self.path.name+'.'+uuid.uuid4().hex+'.tmp')
             try:
                 with tmp.open('w',encoding='utf8') as f:
-                    json.dump(dict(version=1,poses=records),f,ensure_ascii=False,allow_nan=False,indent=2);f.flush();os.fsync(f.fileno())
+                    json.dump(dict(version=1,poses=records,visual_bindings=bindings),f,ensure_ascii=False,allow_nan=False,indent=2);f.flush();os.fsync(f.fileno())
                 os.replace(tmp,self.path)
             finally:tmp.unlink(missing_ok=True)
-    def save(self,name,values,overwrite=False):self._edit(name,values,overwrite)
+    def save(self,name,values,overwrite=False,visual_binding=None):self._edit(name,values,overwrite,visual_binding=visual_binding)
     def delete(self,name):self._edit(name,delete=True)
 
 

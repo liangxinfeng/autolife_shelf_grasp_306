@@ -22,7 +22,7 @@ def library_lock(method):
 
 
 def normalized_record(record):
-    return full_record(record) if 'trajectory' in record else normalize_action_record(record)
+    return full_record(record) if 'trajectory' in record or 'visual_bindings' in record else normalize_action_record(record)
 
 
 def digest(value):return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -52,6 +52,7 @@ class TeachingLibrary:
         meta=doc.get('teaching_editor',{}).get(name,{})
         if meta.get('record_digest')==digest(record):
             draft=deepcopy(meta['draft']);draft['name']=name;return normalize_draft(draft)
+        if record.get('visual_bindings'):raise ValueError('动作参照编辑信息不一致，请恢复原动作库；不会静默丢弃纠偏信息')
         if 'trajectory' in record:raise ValueError('连续轨迹的编辑信息不一致，请恢复录制数据，不能退化为少量姿态执行')
         # Legacy and independently edited actions retain their current poses.
         frames=[dict(label=f'姿态 {i+1}',joints_deg=f['joints_deg'],hold_sec=f['hold_sec'],

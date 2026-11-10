@@ -16,7 +16,13 @@ def make_bridge(base,context):
         def _advance_action(inner):
             from .teaching_replay import advance
             if advance(inner):return
-            super()._advance_action()
+            from .pose_synchronized_output import before_tick
+            try:
+                before_tick(inner)
+                super()._advance_action()
+            except (ValueError,KeyError,TypeError) as exc:
+                inner._lock('姿态同步计算失败，已停止目标输出：'+str(exc))
+                return
             state=inner._action_state
             if state and state['stage']=='hold':
                 from control_center_joint_control.joint_definitions import BODY_JOINTS
@@ -43,9 +49,17 @@ def make_bridge(base,context):
                     # clamping the whole curve to its final endpoint.
                     proxy=dict(state);proxy['start_values']=dict(state['commanded_values'])
                     local_frame=dict(frame,joints_deg=desired)
-                    super()._publish_action_targets(proxy,desired,local_frame)
+                    from .pose_gripper_intent import publish_pose
+                    publish_pose(inner,super()._publish_action_targets,proxy,desired,local_frame)
                     return
-            super()._publish_action_targets(state,desired,frame)
+                from .pose_synchronized_output import progress,publish_body
+                desired=progress(inner,state,segment,state['progress'])
+                inner._preview.update(desired)
+                from .pose_gripper_intent import publish_pose
+                publish_pose(inner,lambda st,q,f:publish_body(inner,st,q,f),state,desired,frame)
+                return
+            from .pose_gripper_intent import publish_pose
+            publish_pose(inner,super()._publish_action_targets,state,desired,frame)
 
         def _through_point(inner):
             state=inner._action_state
@@ -96,6 +110,14 @@ def make_bridge(base,context):
                 if kind in ('stopped','locked'):atomic_json(context.owner.run/'last_action_error.json',entry)
             except (OSError,ValueError,KeyError,TypeError,AttributeError):pass
         def _action_target_reached(inner,targets):
+            state=inner._action_state
+            if state and inner.teaching_segments and not inner.teaching_segments[state['frame_index']].get('recorded_timing'):
+                from .pose_gripper_intent import stable_closing
+                if stable_closing(inner,state,targets,state['commanded_values'],state['start_values']):
+                    from control_center_joint_control.joint_definitions import GRIPPER_JOINTS
+                    context.gripper_targets={n:state['commanded_values'][n] for n in GRIPPER_JOINTS}
+                    inner._event('闭合目标已发送并稳定保持；物体限制开口不继续等待，不代表已验证抓牢')
+                    return True
             if inner._through_point():
                 # No settle or dwell at a through point. Retain bounded
                 # tracking: a lagging actuator cannot skip a waypoint.
@@ -172,6 +194,8 @@ def make_bridge(base,context):
             through=inner._through_point()
             old_end=state['frame_started']+frames[index]['transition_sec']
             old_commands=dict(state['commanded_values'])
+            from control_center_joint_control.joint_definitions import GRIPPER_JOINTS
+            context.gripper_targets={n:state['commanded_values'][n] for n in GRIPPER_JOINTS}
             inner._record_action_event('frame_completed')
             name = inner._action_state['name']
             deviations=len(inner._action_state.get('arrival_deviations',[]))

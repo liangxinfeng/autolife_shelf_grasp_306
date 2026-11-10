@@ -129,7 +129,9 @@ class TeachingComposer(TeachingControls,Q.QWidget):
         name=self.actions.itemData(index)
         if not name or not self.discard_ok():return
         def work():
-            self.draft=self.studio.library.load(name);self.revision=self.studio.library.revision;self.loaded_name=name
+            loaded=self.studio.library.load(name)
+            if any(f.get('visual_binding') for f in loaded['frames']):raise ValueError('此动作包含物体参照，请在“姿态与动作”中编辑/预演，避免普通关节微调破坏物体相对关系')
+            self.draft=loaded;self.revision=self.studio.library.revision;self.loaded_name=name
             if self.draft_path.exists():self.draft_path.unlink()
             self.name.setText(name);self.dirty=False;self.undo_stack=[];self.redo_stack=[];self.end_preview();self.refresh_frames(0);self.message('已载入动作串；选中姿态即可微调。')
         self.guard(work)
@@ -137,6 +139,8 @@ class TeachingComposer(TeachingControls,Q.QWidget):
         if not self.edit_allowed():return
         self.change_properties();self.draft['name']=self.name.text().strip()
         if not self.draft['name']:raise ValueError('请先填写动作串名称')
+        if self.studio.library.records().get(self.draft['name'],{}).get('visual_bindings'):
+            raise ValueError('此名称属于物体纠偏动作，请在“姿态与动作”中更新，或使用新名称保存录制')
         if self.loaded_name!=self.draft['name'] and self.actions.findData(self.draft['name'])>=0:
             if Q.QMessageBox.question(self,'覆盖动作串','同名动作串已存在，是否覆盖？')!=Q.QMessageBox.Yes:return
         record=self.studio.library.save(self.draft,self.revision);self.loaded_name=self.draft['name'];self.dirty=False;self.refresh_library()

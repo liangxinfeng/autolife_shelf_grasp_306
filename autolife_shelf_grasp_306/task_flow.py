@@ -39,6 +39,9 @@ def full_record(record):
             hold=meta['entry_gripper_hold']
             if any(n not in GRIPPER_JOINTS or not math.isfinite(float(v)) or not JOINT_LIMITS[n][0]<=float(v)<=JOINT_LIMITS[n][1] for n,v in hold.items()):raise ValueError('持物开度无效')
             result['trajectory']['entry_gripper_hold']=dict(hold)
+    if record.get('visual_bindings'):
+        from .visual_reference import record_bindings
+        result['visual_bindings']=record_bindings(record)
     return result
 
 

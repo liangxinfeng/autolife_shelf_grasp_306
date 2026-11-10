@@ -91,12 +91,29 @@ def rank_arms(fk,point,preferred='left'):
 class ArmPlannerPool:
     def __init__(self,cfg,calibration,fk,factory,calibration_profiles=None):
         self.base=copy.deepcopy(cfg);self.calibration=calibration;self.fk=fk;self.factory=factory
-        self.planners={};self.attempts=[];self.diagnostics=[];self.native_planners={}
+        self.planners={};self.attempts=[];self.diagnostics=[];self.native_planners={};self.place_planners={}
         self.calibration_profiles=calibration_profiles
 
     def close(self):
         for _,planner in self.native_planners.values():planner.close()
         self.native_planners.clear()
+        for _,planner in self.place_planners.values():planner.close()
+        self.place_planners.clear()
+
+    def for_placement(self,cfg,stopped,on_status):
+        from .vendor_place_planning import VendorPlacePlanner
+        from .planner_cache import cache_key
+        from .planning_control import PlanningControl
+        side=arm_name(cfg['arm']);key=cache_key(cfg);cached=self.place_planners.get(side)
+        context=PlanningControl(stopped,on_status)
+        if cached is None or cached[0]!=key:
+            if cached:cached[1].close()
+            planner=VendorPlacePlanner(copy.deepcopy(cfg),context)
+            self.place_planners[side]=(key,planner)
+        else:planner=cached[1];planner.cfg=copy.deepcopy(cfg);planner.context=context
+        from .planner_cache import transfer_idle_solver
+        transfer_idle_solver(planner,self.native_planners.get(side),key)
+        return planner
 
     def for_config(self,cfg):
         side=arm_name(cfg['arm'])
@@ -147,6 +164,8 @@ class ArmPlannerPool:
                     self.native_planners[side]=(key,planner)
                 else:
                     planner=cached[1];planner.cfg=copy.deepcopy(config);planner.context=context
+                from .planner_cache import transfer_idle_solver
+                transfer_idle_solver(planner,self.place_planners.get(side),key)
             else:
                 planner=self.for_config(config)
             try:

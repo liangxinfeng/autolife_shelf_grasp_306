@@ -17,6 +17,8 @@ def selected_frame_action(record,row):
     if not 0<=row<len(record['keyframes']):raise ValueError('请先选中一个关键帧')
     result=deepcopy(record);result['keyframes']=[deepcopy(record['keyframes'][row])]
     result.pop('trajectory',None)
+    if record.get('visual_bindings'):
+        bound=record['visual_bindings'].get(str(row));result['visual_bindings']={'0':deepcopy(bound)} if bound else {}
     result['loop_count']=1;result['keyframes'][0]['hold_sec']=0.
     return result
 
@@ -215,7 +217,7 @@ class ActionExecutor(Q.QWidget):
         if self.moving(): raise ValueError('动作仍在进行，请先停止并等待停稳再切换页面')
         if self.bridge and self.bridge._hardware_enabled and not self.settled():
             raise ValueError('关节尚未停稳，请稍后切换')
-        self.manual_session=False
+        self._close_visual_base();self.manual_session=False
         self._close_sync()
         if self.panel:
             self.panel.stop_action_preview(quiet=True); self.panel.preview_timer.stop()
@@ -235,13 +237,18 @@ class ActionExecutor(Q.QWidget):
         return bool(b and b._is_feedback_fresh() and all(
             abs(float(b._details.get(n, {}).get('speed', float('inf')))) <= 2. for n in BODY_JOINTS))
 
-    def execute(self, token, record, *, preserve_grippers_at_entry=False):
-        if getattr(self,'manual_session',False):self.release()
+    def execute(self, token, record, *, preserve_grippers_at_entry=False,visual_source=None,visual_base_anchor=None,keep_session=False):
+        # 已有保持会话直接复用，禁止先退出再重复逐轴使能。
         record = full_record(record); b = self.ensure()
         if self.moving(): raise ValueError('关节编辑动作未结束')
+        if visual_source is not None:
+            if visual_base_anchor is None:raise ValueError('纠偏动作缺少底盘参考')
+            from .demo_protocol import StationaryBaseGuard
+            self.visual_base_guard=StationaryBaseGuard(b)
+            self.visual_base_guard.origin=(time.monotonic(),*visual_base_anchor,0.,0.)
         self.panel.setEnabled(False)
         self.job = dict(token=token, record=record, phase='feedback', started=time.monotonic(),
-                        preserve_grippers_at_entry=preserve_grippers_at_entry)
+                        preserve_grippers_at_entry=preserve_grippers_at_entry,visual_source=visual_source,keep_session=keep_session)
         b.outcome = None
 
     def adjust_posture(self,token,setting):
@@ -261,13 +268,19 @@ class ActionExecutor(Q.QWidget):
         self.panel.setEnabled(False);b.outcome=None
         self.job=dict(token=token,prepare_only=True,phase='feedback',started=time.monotonic())
 
+    def _close_visual_base(self):
+        guard=getattr(self,'visual_base_guard',None)
+        if guard:
+            self.visual_base_guard=None;guard.close()
+            if self.bridge:self.bridge.destroy_subscription(guard.sub)
+
     def _close_sync(self):
         if self.bridge:self.bridge.teaching_sync_verified=False
         session=self.sync_session
         if session is None:return
         self.sync_session=None
         try:
-            ok=session.close()
+            ok=session.close(preserve_grippers=True) if getattr(self,'gripper_targets',{}) else session.close()
         except Exception as exc:
             ok=False
             if self.bridge:self.bridge._event('轨迹SYNC退出异常：'+str(exc),'error')
@@ -278,7 +291,7 @@ class ActionExecutor(Q.QWidget):
             atomic_json(self.owner.run/'sync_exit_error.json',dict(time=time.time(),reason='SYNC退出未确认，执行器已停止'))
 
     def stop(self):
-        self.manual_session=False
+        self._close_visual_base();self.manual_session=False
         self.job = None
         if self.bridge:
             if getattr(self.bridge,'task_pause',None):self.bridge.task_pause.cancel()
@@ -311,6 +324,16 @@ class ActionExecutor(Q.QWidget):
             keep_idle(self)
             return
         j = self.job; b = self.bridge
+        # 保留准备阶段证据，而不只记录到点/报错；便于区分反馈跳变和真实运动。
+        now_trace=time.monotonic()
+        if now_trace-j.get('trace_time',-float('inf'))>=.1 or j.get('trace_phase')!=j['phase']:
+            j['trace_time']=now_trace;j['trace_phase']=j['phase']
+            try:
+                with (self.owner.run/'pose_session_events.jsonl').open('a',encoding='utf-8') as stream:
+                    stream.write(json.dumps(dict(time=time.time(),token=j['token'],phase=j['phase'],
+                        measured=dict(b._current),ready=b._hardware_ready,
+                        command=dict((b._action_state or {}).get('commanded_values',{}))),ensure_ascii=False)+'\n')
+            except (OSError,AttributeError,KeyError,TypeError):pass
         try:
             if self.sync_session is not None:self.sync_session.tick()
         except Exception as exc:
@@ -332,6 +355,11 @@ class ActionExecutor(Q.QWidget):
         try:
             if time.monotonic()-j['started'] > (300 if j['phase']=='posture' else 60 if j['phase'] != 'running' else 3600):
                 raise ValueError('动作准备/执行超时')
+            guard=getattr(self,'visual_base_guard',None)
+            if guard:
+                if guard.last is None and j['phase']=='feedback' and time.monotonic()-j['started']<3:return
+                try:guard.check()
+                except ValueError as exc:raise ValueError('物体纠偏动作：'+str(exc).replace('放置','执行')) from exc
             from std_srvs.srv import SetBool
             from std_msgs.msg import String
             if j['phase'] == 'feedback':
@@ -350,20 +378,28 @@ class ActionExecutor(Q.QWidget):
                     j['prepared']=j['plan_future'].result()
                     if any(abs(b._current[n]-v)>1. for n,v in j['plan_entry'].items()):
                         raise ValueError('轨迹准备期间机器人姿态发生变化，请停稳后重试')
-                response = b._set_hardware_enabled_without_reset(SetBool.Request(data=True), SetBool.Response())
-                if not response.success: raise ValueError(response.message)
-                j['phase'] = 'enable'
+                if 'record' in j:
+                    from .pose_manual_session import ManualHoldSession
+                    if getattr(self,'manual_session',False) and self.sync_session and self.sync_session.active:
+                        self.sync_session.tick();j['phase']='sync'
+                    else:
+                        self.sync_exit_ok=True;self.sync_session=ManualHoldSession(b,**({'preserve_gripper_targets':True} if getattr(self,'gripper_targets',{}) else {}));self.sync_session.begin()
+                        j['phase']='sync'
+                    b._event('先刷新真实位置，再单次取得原厂保持会话；不执行逐轴重复使能')
+                else:
+                    response = b._set_hardware_enabled_without_reset(SetBool.Request(data=True), SetBool.Response())
+                    if not response.success: raise ValueError(response.message)
+                    j['phase'] = 'enable'
             elif j['phase'] in ('enable','sync'):
                 if not b._hardware_enabled: raise ValueError(b._last_event)
-                if not b._hardware_ready: return
                 if 'record' in j:
-                    if j['phase']=='enable':
-                        from .teaching_sync import TeachingSyncSession
-                        self.sync_exit_ok=True;self.sync_session=TeachingSyncSession(b);self.sync_session.begin()
-                        j['phase']='sync';b._event('正在取得与VR遥操相同的位置SYNC会话，尚未播放动作');return
-                    if not self.sync_session.poll():return
-                    b.teaching_sync_verified=True
-                    b._event('位置SYNC已就绪，原姿态稳定，开始动作准备')
+                    if not getattr(self.sync_session,'verified',False) and not self.sync_session.poll():return
+                    if not b._hardware_ready:return
+                    self.manual_session=True;b.teaching_sync_verified=True
+                    if j.get('prepared') and any(abs(b._current[n]-v)>(2. if 'Gripper' in n else .5) for n,v in j['plan_entry'].items()):
+                        raise ValueError('真实起点与预计算轨迹不一致，未播放旧起点轨迹；请重新执行')
+                    b._event('单次保持会话已就绪，从新鲜实测位置开始动作')
+                elif not b._hardware_ready:return
                 if j.get('prepare_only'):
                     if not b._is_feedback_fresh() or not self.settled():return
                     self.job=None
@@ -372,6 +408,14 @@ class ActionExecutor(Q.QWidget):
                 if 'posture' not in j or 'Joint_Ankle' in j['posture']:
                     response = b._set_leg_waist_enabled(SetBool.Request(data=True), SetBool.Response())
                     if not response.success: raise ValueError(response.message)
+                    if 'record' in j:
+                        # 原厂保持入口不含踝膝；先锁存完整当前值，再仅补充尚未使能的两轴。
+                        enabled=getattr(self.sync_session,'lower_enabled',set())
+                        lower={n:True for n in ('Joint_Ankle','Joint_Knee') if n not in enabled}
+                        if lower:
+                            b._publish_hardware_hold_pose({'hold_targets':dict(b._current)})
+                            b._publish_vendor(b._joint_enable_pub,lower)
+                            self.sync_session.lower_enabled=enabled|set(lower)
                 if 'posture' in j:
                     from control_center_joint_control.joint_definitions import group_joint_names
                     wanted=j['posture'];groups=[]
@@ -387,14 +431,26 @@ class ActionExecutor(Q.QWidget):
                     if not b._hardware_ready or any(g not in b._active_goals for g in groups):raise ValueError('调姿目标未被控制器接收：'+b._last_event)
                     j.update(phase='posture',started=time.monotonic(),stable=None)
                     return
+                if j.get('visual_source'):
+                    from control_center_joint_control.joint_definitions import BODY_JOINTS
+                    if not b._is_feedback_fresh():raise ValueError('纠偏动作等待新鲜反馈')
+                    if max(abs(b._current[n]-j['visual_source'][n]) for n in BODY_JOINTS)>.5:
+                        raise ValueError('纠偏后使能期间姿态改变，请重新定位参照；没有播放旧轨迹')
                 if j.get('preserve_grippers_at_entry') and not j.get('prepared'):
                     j['record']=entry_gripper_hold(j['record'],b._current)
                     b._event('抓取动作接续：首帧保持当前持物开度；后续帧按示教开合')
+                if j.get('selected_targets'):
+                    from .pose_workspace_motion import source_changed
+                    if source_changed(b._current,j['selected_source']):raise ValueError('末端调节准备期间姿态改变，请重新取当前末端')
+                    # 未选择的关节使用刚确认的实测保持值，夹爪保留当前执行意图。
+                    target=dict(b._current);target.update(getattr(self,'gripper_targets',{}));target.update(j['selected_targets'])
+                    j['record']['keyframes'][0]['joints_deg']=target
                 if j.get('prepared'):
                     j['record'],segments,self.teaching_phases=j.pop('prepared')
                 else:
                     from .teaching_trajectory import plan
-                    j['record'],segments,self.teaching_phases=plan(j['record'],b._current,self.owner.root/'data/fixed_actions')
+                    entry=dict(b._current);entry.update(getattr(self,'gripper_targets',{}))
+                    j['record'],segments,self.teaching_phases=plan(j['record'],entry,self.owner.root/'data/fixed_actions')
                 b.teaching_segments=segments
                 b._on_action_command(String(data=json.dumps(dict(command='start', name=j['token'], action=j['record']))))
                 if not b._action_state: raise ValueError(b._last_event)
@@ -418,9 +474,12 @@ class ActionExecutor(Q.QWidget):
                 if not self.settled(): j['stable'] = None
                 elif j['stable'] is None: j['stable'] = time.monotonic()
                 elif time.monotonic()-j['stable'] >= .3:
-                    self.job = None; self.panel.setEnabled(True); self.release()
+                    self.job = None; self.panel.setEnabled(True)
+                    if j.get('keep_session'):
+                        self._close_visual_base();self.manual_session=True
+                    else:self.release()
                     self.completed.emit(j['token'], self.sync_exit_ok,
-                        (('录制动作已播放完成并停稳，SYNC已退出；夹爪到位未核验' if j.get('recorded_gripper_unverified') else '动作已完成并停稳，SYNC已退出') if self.sync_exit_ok else '动作已停住，但SYNC退出未确认，请检查原厂服务'))
+                        (('录制动作已播放完成并停稳，SYNC已退出；夹爪到位未核验' if j.get('recorded_gripper_unverified') else ('姿态已到位，保持会话可继续调节' if j.get('keep_session') else '动作已完成并停稳，SYNC已退出')) if self.sync_exit_ok else '动作已停住，但SYNC退出未确认，请检查原厂服务'))
                 if self.job and time.monotonic()-j['started'] > 15: raise ValueError('动作结束后未确认停稳')
         except Exception as exc:
             token = j['token']; self.stop(); self.release(); self.completed.emit(token, False, str(exc))

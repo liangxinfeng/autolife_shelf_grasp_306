@@ -145,6 +145,8 @@ def main():
                     p=next((p for p in available if p['id']==m['id']),None)
                     item.update(product=p,match=m,name=p['name'] if p else item.get('name','未录入 / 待确认') if item.get('point_selection') else '未录入 / 待确认')
                     item.pop('grasp_fraction',None)
+            from .visual_action_worker import VisualActions
+            visual=VisualActions(root,run,cfg,robot,snapshot,transform,fk,perception,store)
             while True:
                 try:cmd=commands.get(timeout=.2)
                 except queue.Empty:continue
@@ -152,6 +154,10 @@ def main():
                 try:
                     action=cmd['action']
                     if action=='quit':break
+                    if action.startswith('visual_'):
+                        try:emit('visual_result',visual_id=cmd['visual_id'],action=action,result=visual.handle(cmd))
+                        except Exception as exc:emit('visual_result',visual_id=cmd['visual_id'],action=action,error=str(exc))
+                        continue
                     updated_cfg=resolve_workspace_reset(root,cfg)
                     reset_changed=any(updated_cfg.get(k)!=cfg.get(k) for k in ('workspace_reset_sha256','workspace_pose_speed_percent'))
                     cfg=updated_cfg
@@ -222,6 +228,8 @@ def main():
                         cfg.update({k:v for k,v in grasp['config'].items() if k!='semantic_prompt_overrides'})
                         if grasp.get('calibration_sha256')!=calibration_sha:
                             raise ValueError('抓取后相机坐标来源改变，请重新规划放置')
+                        from .grasp_speed import read_percent
+                        cfg['grasp_speed_percent']=read_percent(root)
                         tcp=np.asarray(grasp.get('physical_tcp',grasp['tcp']),float)
                         planner=arm_pool.for_config(cfg)
                         attempt_path=run/'observation_attempt.json'
@@ -292,7 +300,11 @@ def main():
                                 camera_D=frame['D'].tolist()))
                             emit('status',text='筛选可达落点，再检查下降、松爪与收回路径…')
                             planning_started=time.monotonic()
-                            plan=plan_place(planner,q,placement_tcp,grasp,points,table,settings)
+                            if cfg.get('grasp_backend')=='vendor_ik_trajectory':
+                                planner=arm_pool.for_placement(cfg,lambda:(run/'stop').exists(),
+                                    lambda text:emit('status',text=text))
+                                plan=planner.plan_place(q,placement_tcp,grasp,points,table,settings)
+                            else:plan=plan_place(planner,q,placement_tcp,grasp,points,table,settings)
                             diag['timing_seconds']['path_planning']=round(time.monotonic()-planning_started,4)
                         except ValueError as exc:
                             diag['reason']=str(exc)

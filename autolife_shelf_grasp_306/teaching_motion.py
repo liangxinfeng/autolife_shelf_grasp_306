@@ -28,6 +28,10 @@ def normalize_draft(draft):
             minimum_sec=finite(f.get('minimum_sec',.6),.2,30.,'最短到达时间'),
             ghost=bool(f.get('ghost',True))))
         if 'sample_index' in f:frames[-1]['sample_index']=int(f['sample_index'])
+        if f.get('visual_binding'):
+            from .visual_reference import binding
+            frames[-1]['visual_binding']=binding(f['visual_binding'])
+            frames[-1]['visual_enabled']=f.get('visual_enabled',True) is not False
     result=dict(version=1,name=str(draft.get('name','')).strip()[:32],frames=frames)
     if draft.get('kind')=='trajectory':
         from .teaching_track import check_hash
@@ -85,6 +89,8 @@ def compile_action(draft,entry=None):
     if draft.get('kind')=='trajectory':
         record['trajectory']=dict(sha256=draft['trajectory_ref'],indices=[f['sample_index'] for f in draft['frames']],
                                   speeds=[f['speed_percent'] for f in draft['frames']],minimums=[f['minimum_sec'] for f in draft['frames']],timing=draft['timing'])
+    bindings={str(i):f['visual_binding'] for i,f in enumerate(draft['frames']) if f.get('visual_binding') and f.get('visual_enabled',True)}
+    if bindings:record['visual_bindings']=bindings
     return full_record(record)
 
 

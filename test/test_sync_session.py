@@ -17,6 +17,11 @@ class Node:
     def create_publisher(self,*a):return Publisher()
     def service_is_ready(self):return True
     def _is_feedback_fresh(self):return True
+    @property
+    def _feedback_monotonic(self):
+        import time
+        return time.monotonic()
+    def snapshot(self):return {}
     def call_async(self,request):
         self.requests.append(request.data)
         return SimpleNamespace(done=lambda:True,result=lambda:SimpleNamespace(success=self.success,message='test refusal'))

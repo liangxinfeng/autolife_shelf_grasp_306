@@ -247,9 +247,9 @@ class Window(DemoNavigation,Q.QWidget):
             value=checked_margin(json.loads(settings_path.read_text('utf-8'))['tightening_mm']) if settings_path.exists() else 5.
         except (ValueError,KeyError,OSError):value=5.
         self.grip_margin.setValue(value);self.grip_margin.valueChanged.connect(self.grip_setting_changed);grip_row.addWidget(self.grip_margin)
-        speed_row=Q.QHBoxLayout();right.addLayout(speed_row);speed_row.addWidget(Q.QLabel('抓取运动速度'))
+        speed_row=Q.QHBoxLayout();right.addLayout(speed_row);speed_row.addWidget(Q.QLabel('抓取 / 放置速度'))
         self.grasp_speed=Q.QSlider(C.Qt.Horizontal);self.grasp_speed.setRange(20,100);self.grasp_speed.setSingleStep(5)
-        self.grasp_speed.setToolTip('100%为当前抓取速度；调低可慢速试运行。仅影响接近与收回，不改变复位、夹爪及示教动作。修改后请重新规划。')
+        self.grasp_speed.setToolTip('抓取和原厂腰臂放置共用速度比例；100%沿用配置上限。放置接近桌面时仍局部限速。不改变复位、夹爪及示教动作。修改后请重新规划。')
         from .grasp_speed import read_percent
         try:speed=int(read_percent(self.root))
         except (ValueError,KeyError,OSError):speed=100
@@ -385,7 +385,7 @@ class Window(DemoNavigation,Q.QWidget):
         self.invalidate_plan();self.path_revision=None;self.video.path=[];self.video.update()
         try:
             atomic_json(self.root/'data/grasp_speed.json',{'percent':int(value)})
-            self.status.setText(f'抓取运动速度 {value}%，请重新规划；预览与真机将使用同一速度。')
+            self.status.setText(f'抓取 / 放置速度 {value}%，请重新规划后执行。')
         except OSError as exc:self.status.setText('速度本次有效，但保存失败：'+str(exc))
         self.controls()
 
@@ -405,7 +405,7 @@ class Window(DemoNavigation,Q.QWidget):
         self.status.setText('底盘位置已调整，请重新识别物品并规划。');self.controls()
 
     def controls(self):
-        idle=not self.busy and self.motion is None and not self.demo_active and not self.placement_active
+        idle=not self.busy and self.motion is None and not self.demo_active and not self.placement_active and not (hasattr(self,'studio') and self.studio.visual.busy)
         if hasattr(self,'workflow'):
             idle=idle and not self.workflow.active and not self.workflow.base.moving() and self.module_tabs.currentIndex()==0 and not self.automatic_active()
             self.flow_button.setEnabled(idle)
@@ -457,6 +457,8 @@ class Window(DemoNavigation,Q.QWidget):
             self.execute.setText('确认演示抓取');self.execute.setEnabled(idle)
 
     def send(self,action,**values):
+        if hasattr(self,'studio') and self.studio.visual.busy:
+            self.status.setText('正在记录/计算物体参照，请完成或停止后再操作视觉抓取');return
         if not self.ready:
             self.status.setText('视觉功能不可用：'+self.vision_error+'；预录制动作和航点导航仍可使用。')
             return
@@ -520,6 +522,8 @@ class Window(DemoNavigation,Q.QWidget):
 
     def receive_event(self,data):
         kind=data['event']
+        if kind=='visual_result':
+            self.studio.visual.receive(data);return
         if 'request_id' in data and data['request_id']!=self.request:return
         if self.cancel_pending:
             if 'request_id' in data:
@@ -933,6 +937,7 @@ class Window(DemoNavigation,Q.QWidget):
                 self.video.pix=G.QPixmap(str(path));self.preview_stamp=stamp;self.video.update()
 
     def finished(self,*_):
+        if hasattr(self,'studio'):self.studio.visual.fail('视觉后台已退出，纠偏未执行')
         from .task_capabilities import uses_perception
         visual_flow=self.workflow.active and uses_perception(self.workflow.cursor.record)
         visual_auto=self.automatic_active() and uses_perception(self.automatic.record)

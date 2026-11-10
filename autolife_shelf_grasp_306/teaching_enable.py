@@ -19,12 +19,10 @@ def wait_for_enable_feedback(bridge):
             or prepare.get('stage')!='verify_hold'
             or getattr(bridge,'_hardware_unlock_mode',None)!='without_reset'):
         return False
-    if not bridge._is_feedback_fresh():
-        bridge._lock('使能确认期间关节反馈已过期；未开始动作，已锁定')
-        return True
+    fresh=bridge._is_feedback_fresh()
     lost=bridge._communication_lost_joints(BODY_JOINTS)
     window=prepare.get('enable_feedback_recovery')
-    if not lost and window is None:
+    if fresh and not lost and window is None:
         # 保持目标不应与实测相差大角度；禁止向旧缓存角度追赶45秒。
         changed=[name for name in BODY_JOINTS
                  if abs(float(bridge._current.get(name,float('inf')))-
@@ -42,34 +40,45 @@ def wait_for_enable_feedback(bridge):
         window=dict(start=now,last=None,online_since=None,count=0)
         prepare['enable_feedback_recovery']=window
         bridge._record_action_event('enable_feedback_wait','使能期间短时失联，等待全部关节恢复；不下发动作或重复使能')
-        bridge._event(f'使能确认：等待{len(lost)}个关节恢复通信，最长3秒，尚未播放动作','warn')
-    if lost:
+        bridge._event(f'使能确认：等待通信和原保持姿态恢复稳定，最长3秒，尚未播放动作','warn')
+    if lost or not fresh:
         window.update(last=None,online_since=None,count=0,recovered=False)
         prepare['stable_since']=None
         if now-window['start']>=RECOVERY_TIMEOUT_SEC:
-            bridge._lock('使能后关节通信未在3秒内稳定恢复，未开始动作：'+'、'.join(lost))
+            bridge._lock('使能后关节通信未在3秒内稳定恢复，未开始动作：'+('、'.join(lost) if lost else '反馈未更新'))
         return True
     if window.get('recovered'):return False
     if now-window['start']>=RECOVERY_TIMEOUT_SEC:
-        bridge._lock('使能后的在线反馈未在3秒内完成稳定确认；未开始动作，已锁定')
+        bridge._lock('使能后的反馈与原保持目标未在3秒内稳定；未开始动作：'+window.get('waiting_reason','反馈时间未连续'))
         return True
     stamp=float(bridge._feedback_monotonic)
     if not math.isfinite(stamp):
         bridge._lock('使能确认反馈时间无效；未开始动作，已锁定');return True
     position_limit=max(.1,float(bridge.get_parameter('hardware_reset_position_tolerance_deg').value))
     speed_limit=max(.1,float(bridge.get_parameter('hardware_reset_speed_tolerance_deg_s').value))
+    unsettled=[]
     for name in BODY_JOINTS:
         actual=float(bridge._current.get(name,float('nan')))
         goal=float(prepare['hold_targets'].get(name,float('nan')))
         speed=float(bridge._details.get(name,{}).get('speed',float('nan')))
-        if not all(math.isfinite(v) for v in (actual,goal,speed)) or abs(actual-goal)>position_limit:
-            bridge._lock('使能通信恢复时关节未保持原姿态，未开始动作：'+name)
+        if not all(math.isfinite(v) for v in (actual,goal,speed)):
+            bridge._lock('使能通信恢复时关节反馈数值无效，未开始动作：'+name)
             return True
-        if abs(speed)>speed_limit:
-            # Match native hold verification: a fresh speed spike resets the
-            # settling window, it does not claim a permanent pose change.
-            window.update(last=None,online_since=None,count=0)
+        error=abs(actual-goal)
+        # 与未断线分支相同：大幅反馈变化不能追赶；小偏差等待收敛，
+        # 到位门限仍严格采用原参数，不重建保持目标、不重复使能。
+        if error>10.:
+            bridge._lock(f'使能通信恢复时姿态大幅变化，未开始动作：{name}，偏差{error:.2f}°')
             return True
+        if error>position_limit or abs(speed)>speed_limit:
+            unsettled.append(f'{name}，偏差{error:.2f}°/到位{position_limit:.2f}°，速度{speed:.2f}°/秒')
+    if unsettled:
+        window.update(last=None,online_since=None,count=0,waiting_reason='；'.join(unsettled))
+        prepare['stable_since']=None
+        if not window.get('settling_reported'):
+            bridge._record_action_event('enable_pose_settling',window['waiting_reason'])
+            window['settling_reported']=True
+        return True
     if window['last'] is None or stamp<window['last'] or stamp-window['last']>.15:
         window.update(last=stamp,online_since=stamp,count=1)
         return True
@@ -77,7 +86,7 @@ def wait_for_enable_feedback(bridge):
         window['last']=stamp;window['count']+=1
     if window['count']<4 or stamp-window['online_since']<ONLINE_STABLE_SEC:return True
     window['recovered']=True
-    prepare['stable_since']=None
+    prepare['stable_since']=window['online_since']
     prepare['next_publish']=now
-    bridge._record_action_event('enable_feedback_recovered','全部身体关节在线且原姿态稳定0.4秒，继续原有使能稳定检查')
+    bridge._record_action_event('enable_feedback_recovered','全部身体关节在线且原姿态稳定0.4秒，交回原厂到位检查，复用已完成的稳定窗口')
     return False

@@ -46,8 +46,10 @@ class PoseWorkspace(Q.QWidget):
         self.pose_list=Q.QComboBox();self.pose_list.setMinimumContentsLength(12);form.addWidget(self.pose_list)
         self.row(form,self.button('预览姿态',self.load_pose),self.button('执行姿态',self.execute_pose),self.button('删除',self.delete_pose))
         self.pose_name=Q.QLineEdit();self.pose_name.setPlaceholderText('姿态名称，如：右手准备位');self.pose_name.setMaxLength(32);form.addWidget(self.pose_name)
-        self.save_source=Q.QComboBox();self.save_source.addItem('保存实机当前姿态',False);self.save_source.addItem('保存蓝色编辑预览',True);form.addWidget(self.save_source)
+        self.save_source=Q.QComboBox();self.save_source.addItem('保存实机姿态＋已执行的夹爪目标',False);self.save_source.addItem('保存蓝色编辑预览',True);form.addWidget(self.save_source)
         self.row(form,self.button('保存姿态',self.save_pose),self.button('加入动作串 →',self.add_pose))
+        from .visual_action_panel import VisualPanel
+        self.visual_panel=VisualPanel(self);p.insertWidget(0,self.visual_panel)
         self.row(form,self.button('选中姿态设为抓取复位',self.save_selected_reset),
                  self.button('实机当前姿态设为复位',self.save_reset))
         self.reset_note=Q.QLabel();self.reset_note.setWordWrap(True);form.addWidget(self.reset_note);self.refresh_reset()
@@ -131,7 +133,9 @@ class PoseWorkspace(Q.QWidget):
         n=self.joint.currentData();values=self.studio.feedback.values
         if n not in values:return
         actual=self.display_value(n,values[n]);target=self.display_value(n,self.edits.get(n,values[n]));unit='mm' if n in self.curves else '°'
-        self.actual.setText(f'实测 {actual:.1f} {unit}　→　预览 {target:.1f} {unit}')
+        held=getattr(self.studio.engine,'gripper_targets',{}).get(n)
+        extra=f'　保持目标 {self.display_value(n,held):.1f} {unit}' if held is not None else ''
+        self.actual.setText(f'实测 {actual:.1f} {unit}　→　预览 {target:.1f} {unit}'+extra)
         self.changing=True;self.value.setValue(target);self.slider.setValue(round(target*10));self.changing=False
     def numeric(self,value):
         if self.changing:return
@@ -173,17 +177,25 @@ class PoseWorkspace(Q.QWidget):
     def load_pose(self):
         self.available();name=self.pose_list.currentText()
         if not name:raise ValueError('请先保存姿态')
-        self.end_preview();self.edits=self.store.read()[name];self.pose_name.setText(name);self.update_joint();self.message('预览姿态：'+name+'；尚未驱动机器人')
+        self.end_preview();self.edits=self.store.read()[name];self.pose_name.setText(name);self.visual_panel.select_binding(self.store.binding(name));self.update_joint();self.message('预览姿态：'+name+'；尚未驱动机器人')
     def save_pose(self):
         q=self.capture();name=self.pose_name.text().strip()
         if not name:raise ValueError('请填写姿态名称')
+        # 实机身体姿态仍取反馈；夹爪持物时保存用户已下发的期望开度。
+        q.update(getattr(self.studio.engine,'gripper_targets',{}))
         if self.save_source.currentData():q.update(self.edits)
         exists=name in self.store.read()
         if exists and Q.QMessageBox.question(self,'覆盖姿态','覆盖“'+name+'”？已保存动作串保留原快照，不会随之改变。')!=Q.QMessageBox.Yes:return
-        self.store.save(name,q,exists);self.reload_poses();self.pose_list.setCurrentText(name);self.available_pose.setCurrentText(name);self.message('姿态已保存：'+name)
-        from .workspace_reset import sync_named_pose
-        if sync_named_pose(self.owner.root,self.studio.cfg,name,q):
-            self.reset_changed();self.message('姿态与抓取复位目标已同步更新：'+name)
+        snapshot=self.store.path.read_bytes() if self.store.path.exists() else b''
+        def saved(bound):
+            if (self.store.path.read_bytes() if self.store.path.exists() else b'')!=snapshot:
+                self.message('保存期间姿态库被其他窗口更新，请重新保存；当前编辑保留',True);return
+            self.store.save(name,q,exists,visual_binding=bound);self.reload_poses();self.pose_list.setCurrentText(name);self.available_pose.setCurrentText(name)
+            self.message('姿态已保存：'+name+(' · 已关联物体初始参照，预览/执行时识别' if bound else ' · 普通姿态'))
+            from .workspace_reset import sync_named_pose
+            if sync_named_pose(self.owner.root,self.studio.cfg,name,q):
+                self.reset_changed();self.message('姿态与抓取复位目标已同步更新：'+name+'；复位始终使用固定全身姿态')
+        self.visual_panel.bind(q,saved)
     def delete_pose(self):
         self.available();name=self.pose_list.currentText()
         if not name:return
@@ -226,10 +238,12 @@ class PoseWorkspace(Q.QWidget):
         q=self.capture();name=self.pose_list.currentText()
         if not name:raise ValueError('请选择已保存姿态')
         from .pose_execution_profile import pose_record
-        self.execute_record(pose_record(self.store.read()[name],q,self.manual_speed.value(),name))
+        record=pose_record(self.store.read()[name],q,self.manual_speed.value(),name);bound=self.store.binding(name)
+        if bound:record['visual_bindings']={'0':bound}
+        self.execute_record(record)
     def execute_record(self,record):
         self.end_preview();(self.owner.run/'stop').unlink(missing_ok=True)
-        self.studio.execute('pose-workspace-'+str(time.time_ns()),record);self.message('已提交，等待控制器准备并执行。')
+        self.studio.execute('pose-workspace-'+str(time.time_ns()),record,keep_session=True);self.message('已提交，等待控制器准备并执行。')
 
     def make_height(self):
         page=Q.QWidget();p=Q.QVBoxLayout(page);self.mode.addTab(page,'身体高度')
@@ -255,18 +269,23 @@ class PoseWorkspace(Q.QWidget):
         self.row(p,self.button('上移',lambda:self.move_row(-1)),self.button('下移',lambda:self.move_row(1)),self.button('移除',self.remove_row))
         row=Q.QHBoxLayout();row.addWidget(Q.QLabel('整体速度'));self.overall_speed=self.spin(25,100,5,' %');self.overall_speed.setValue(70);self.overall_speed.valueChanged.connect(self.mark_dirty);row.addWidget(self.overall_speed);p.addLayout(row)
         self.row(p,self.button('保存动作串',self.save_action),self.button('▶ 模型预演',self.toggle_preview),self.button('真机运行…',self.run_action))
+        self.visual_toggle=self.button('暂停选中姿态纠偏',self.clear_visual)
+        self.row(p,self.button('定位参照并预览纠偏',self.preview_visual),self.visual_toggle)
+        self.row(p,self.button('查看参照画面',self.visual_panel.show_image))
         self.playback=Q.QLabel('点击列表查看对应姿态。动作串保存后可直接用于任务流程。');self.playback.setWordWrap(True);p.addWidget(self.playback)
         note=Q.QLabel('按列表顺序执行；关节到位后再夹爪开合。连续录制动作仍在“遥操动作编排器”中编辑，避免破坏原时序。');note.setWordWrap(True);p.addWidget(note)
     def mark_dirty(self,*_):self.dirty=True;self.end_preview()
     def render_rows(self,index=None):
         row=self.sequence.currentRow() if index is None else index;self.sequence.blockSignals(True);self.sequence.clear()
-        for i,r in enumerate(self.rows):self.sequence.addItem(f'{i+1:02d}　{r["label"]}')
+        for i,r in enumerate(self.rows):self.sequence.addItem(f'{i+1:02d}　{r["label"]}'+(('　◎ 物体纠偏' if r.get('visual_enabled',True) else '　○ 纠偏已暂停') if r.get('visual_binding') else ''))
         self.sequence.setCurrentRow(min(max(0,row),len(self.rows)-1));self.sequence.blockSignals(False);self.select_frame(self.sequence.currentRow())
     def add_pose(self):
         self.available();name=self.pose_list.currentText() if self.tools.currentIndex()==0 else self.available_pose.currentText()
         if not name:raise ValueError('先保存一个姿态，再添加到动作串')
         if len(self.rows)>=100:raise ValueError('单个动作串最多100个姿态')
-        self.rows.append(frame(name,self.store.read()[name]));self.mark_dirty();self.tools.setCurrentIndex(1);self.render_rows(len(self.rows)-1)
+        row=frame(name,self.store.read()[name]);bound=self.store.binding(name)
+        if bound:row['visual_binding']=bound
+        self.rows.append(row);self.mark_dirty();self.tools.setCurrentIndex(1);self.render_rows(len(self.rows)-1)
     def move_row(self,d):
         i=self.sequence.currentRow();j=i+d
         if 0<=i<len(self.rows) and 0<=j<len(self.rows):self.rows[i],self.rows[j]=self.rows[j],self.rows[i];self.mark_dirty();self.render_rows(j)
@@ -274,6 +293,9 @@ class PoseWorkspace(Q.QWidget):
         i=self.sequence.currentRow()
         if 0<=i<len(self.rows):self.rows.pop(i);self.mark_dirty();self.render_rows(i)
     def select_frame(self,index):
+        bound=0<=index<len(self.rows) and self.rows[index].get('visual_binding')
+        self.visual_toggle.setEnabled(bool(bound))
+        self.visual_toggle.setText('恢复选中姿态纠偏' if bound and not self.rows[index].get('visual_enabled',True) else '暂停选中姿态纠偏')
         if 0<=index<len(self.rows):self.playback.setText(f'选中：{self.rows[index]["label"]}；蓝色虚影仅预览，不运动。')
     def draft(self):return compose(self.sequence_name.text().strip(),self.rows,self.overall_speed.value())
     def reload_actions(self):
@@ -318,11 +340,37 @@ class PoseWorkspace(Q.QWidget):
         q=self.capture();d=self.draft();record=compile_action(d,q)
         if self.confirm(f'执行当前动作串，共{len(self.rows)}个全身姿态，包含腰腿与夹爪。模型预演不能确认环境障碍。'):
             self.execute_record(record)
+    def clear_visual(self):
+        self.available();i=self.sequence.currentRow()
+        if 0<=i<len(self.rows) and self.rows[i].get('visual_binding'):
+            self.rows[i]['visual_enabled']=not self.rows[i].get('visual_enabled',True)
+            self.mark_dirty();self.render_rows(i)
+    def preview_visual(self):
+        self.available();self.end_preview();self.studio.ensure()
+        record=compile_action(self.draft(),self.capture())
+        if not record.get('visual_bindings'):raise ValueError('请先添加已关联物体的姿态，普通动作使用模型预演即可')
+        def done(data):
+            try:
+                if data.get('error'):raise ValueError(data['error'])
+                r=data['result'];self.visual_panel.show_correction(r);self.preview=plan(r['record'],r['source'],self.studio.library.directory)
+                self.elapsed=0.;self.playing=True;self.last_tick=time.monotonic()
+                detail='；'.join(f'{v["name"]}：XYZ '+ '/'.join(f'{x:+.1f}' for x in v['offset_mm'])+' mm' for v in r['diagnostics'])
+                self.message('纠偏预演（不运动）：'+detail+'。真机运行会重新拍摄定位。')
+                if self.model:self.model.set_action_preview_active(True)
+            except Exception as exc:self.message(str(exc),True)
+            finally:
+                if self.studio.engine.bridge is None:self.studio._unlock()
+        try:self.studio.visual.request('visual_correct',done,record=record)
+        except Exception:
+            if self.studio.engine.bridge is None:self.studio._unlock()
+            raise
     def toggle_preview(self):
         if self.playing:self.end_preview();return
         self.available();q=self.studio.feedback.values
         if not q:raise ValueError('等待实机反馈后预演，不能把未知关节补零')
-        record=compile_action(self.draft(),q);self.preview=plan(record,q,self.studio.library.directory);self.elapsed=0.;self.playing=True;self.last_tick=time.monotonic()
+        record=compile_action(self.draft(),q)
+        if record.get('visual_bindings'):self.preview_visual();return
+        self.preview=plan(record,q,self.studio.library.directory);self.elapsed=0.;self.playing=True;self.last_tick=time.monotonic()
         if self.model:self.model.set_action_preview_active(True)
     def end_preview(self):
         self.preview=None;self.playing=False

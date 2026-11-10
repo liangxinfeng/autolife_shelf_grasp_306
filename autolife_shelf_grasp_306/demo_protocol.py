@@ -29,7 +29,7 @@ def validate_place(plan,run):
                 base.get('leg')!='to_front' or base.get('name')!=context['front'] or base.get('map')!=context['map'])):
             raise ValueError('尚未确认本轮导航回到所选前台航点')
     require_same_arm(plan,record)
-    if (plan.get('place_protocol_version') not in (1,2,3) or not plan.get('table_height_checked') or
+    if (plan.get('place_protocol_version') not in (1,2,3,4) or not plan.get('table_height_checked') or
             record.get('status')!='completed' or
             record.get('plan_id')!=context['grasp_plan_id'] or plan.get('parent_plan_id')!=context['grasp_plan_id'] or
             plan['product']['id']!=context['product_id'] or plan.get('demo_settings')!=context['settings']):
@@ -48,10 +48,13 @@ def validate_place(plan,run):
         if abs(float(plan['source_q'][jaw])-held)>1e-6:
             raise ValueError('观察路径夹爪起始状态不一致')
         return
-    expected=(['place_approach','place_lower','place_return'] if plan.get('place_protocol_version')==3
+    expected=(['place_approach','place_lower','place_return'] if plan.get('place_protocol_version') in (3,4)
               else ['place_approach','place_lower','place_release_retreat','place_return'])
     if [s.get('phase') for s in plan['segments']]!=expected:
         raise ValueError('放置阶段不完整，不能松爪')
+    if plan.get('place_protocol_version')==4:
+        from .vendor_place_trajectory import validate_blocks
+        validate_blocks(plan)
     if plan.get('place_protocol_version') in (2,3):
         # Reject malformed/new-format speeds BEFORE unlocking or entering SYNC.
         from autolife_handeye_calibration_306.verification_trajectory import JointPath

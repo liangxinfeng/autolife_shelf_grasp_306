@@ -13,7 +13,7 @@ from autolife_handeye_calibration_306.verification_trajectory import JointPath
 from control_center_joint_control.joint_definitions import GROUPS
 
 
-def timed_samples(path, caps, accels):
+def timed_samples(path, caps, accels, path_speed_limit=None):
     """离线前后扫描定时：只在曲率大的局部减速，不把整段一同拖慢。
 
     q'=dq/ds；关节加速度=q''·路径速度²+q'·路径加速度。
@@ -24,6 +24,11 @@ def timed_samples(path, caps, accels):
     d1=np.abs(path.curve(s,1));d2=np.abs(path.curve(s,2))
     speeds=np.minimum(np.min(caps/np.maximum(d1,1e-9),axis=1),
         np.sqrt(np.min(.4*accels/np.maximum(d2,1e-9),axis=1)))
+    if path_speed_limit is not None:
+        limit=np.asarray(path_speed_limit(s),float)
+        if limit.shape!=s.shape or not np.isfinite(limit).all() or np.any(limit<=0):
+            raise ValueError('末端速度曲线无效')
+        speeds=np.minimum(speeds,limit)
     acceleration=np.min(.4*accels/np.maximum(d1,1e-9),axis=1)
     speeds[0]=speeds[-1]=0.
     for i in range(1,len(s)):

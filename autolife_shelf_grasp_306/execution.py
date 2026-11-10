@@ -21,7 +21,7 @@ from .motion import intermediate_tolerance
 from .sync_session import PositionSyncSession
 from .joint_limits import validate_grasp_plan,check_pose
 from .carry import validate_carry_plan
-from .pose_handoff import start_pose_diagnostic,await_loaded_pose
+from .pose_handoff import start_pose_diagnostic,await_loaded_pose,await_start_pose
 from .arm_selection import plan_arm,gripper_name,gripper_targets
 
 
@@ -44,7 +44,8 @@ def main():
     parser=argparse.ArgumentParser();parser.add_argument('--plan',required=True);parser.add_argument('--run',required=True)
     parser.add_argument('--expected-plan-id');parser.add_argument('--expected-product-id')
     args=parser.parse_args();run=Path(args.run);node=None;session=None;base_guard=None;record={'status':'not_started'};preparing=False;placing=False;observing=False;workspace_reset=False
-    arm='left';arm_group='left_arm';vendor_grasp=False;native_trajectory_function=None
+    arm='left';arm_group='left_arm';vendor_grasp=False;vendor_place=False;native_motion=False;native_trajectory_function=None
+    preloader=None
     timing_started=time.monotonic();timings={}
     def mark(name):
         timings[name]=round(time.monotonic()-timing_started,4)
@@ -53,13 +54,22 @@ def main():
     try:
         plan=json.loads(Path(args.plan).read_text('utf-8'));cfg=plan['config']
         vendor_grasp=plan.get('execution_backend')=='vendor_trajectory_v1'
+        vendor_place=plan.get('execution_backend')=='vendor_place_trajectory_v1'
+        native_motion=vendor_grasp or vendor_place
         if vendor_grasp:
             if plan.get('kind') in ('prepare','place','observe'):
                 raise ValueError('原厂抓取整段执行器不能用于复位或放置')
             from .vendor_grasp_trajectory import validate_blocks,execute_blocks,load_trajectory_function
             validate_blocks(plan)
             # 在使能/进入SYNC之前加载原厂模块，避免首次导入阻塞控制心跳。
-            native_trajectory_function=load_trajectory_function(cfg)
+            from .trajectory_preload import TrajectoryPreload
+            preloader=TrajectoryPreload(load_trajectory_function,cfg)
+        if vendor_place:
+            from .vendor_place_trajectory import validate_blocks as validate_place_blocks
+            from .vendor_grasp_trajectory import load_trajectory_function
+            validate_place_blocks(plan)
+            from .trajectory_preload import TrajectoryPreload
+            preloader=TrajectoryPreload(load_trajectory_function,cfg)
         arm=plan_arm(plan);arm_group=arm+'_arm';other='right' if arm=='left' else 'left';jaw=gripper_name(arm)
         preparing=plan.get('kind')=='prepare'
         workspace_reset=bool(preparing and plan.get('workspace_reset'))
@@ -125,9 +135,12 @@ def main():
                   '-p','command_update_rate_hz:=60.0',
                   '-p',f'max_single_step_deg:={bridge_lead}',
                   '-p','max_gripper_command_lead_deg:=30.0']
-        if vendor_grasp:
-            # 此阶段只确认通讯与保持，后续原厂SYNC仍独立验证稳定0.6秒。
+        if native_motion:
+            # 此阶段确认通讯与保持，后续SYNC独立核对切换后的连续新反馈。
             ros_args+=['-p','hardware_reset_stable_sec:=0.2']
+        if vendor_grasp:
+            # 使能的旧3°到位门限不能用于后续0.5°起点交接。仅本抓取进程生效。
+            ros_args+=['-p','hardware_reset_position_tolerance_deg:=0.3']
         for name in ['joint_states','target_joint_states','status','preview_command','apply_command','action_command',
                      'set_hardware_enabled','set_hardware_enabled_without_reset','set_leg_waist_enabled']:
             ros_args+=['-r',f'/control_center_joint_control/{name}:=/shelf_grasp306/{name}']
@@ -148,11 +161,16 @@ def main():
         def check_start_pose(stage):
             def save(diagnostic):handoff_diagnostics[stage]=diagnostic
             try:
-                if placing or observing:
+                if (placing or observing) and stage!='执行前':
                     await_loaded_pose(node.snapshot,spin,lambda:node._feedback_monotonic,
                         source,stage,plan.get('kind'),time.monotonic,save,arm=arm)
+                elif vendor_grasp and stage in ('使能期间','SYNC切换期间'):
+                    await_start_pose(node.snapshot,spin,lambda:node._feedback_monotonic,
+                        source,stage,time.monotonic,save,arm=arm)
                 else:
-                    diagnostic=start_pose_diagnostic(node.snapshot(),source,stage,plan.get('kind'),arm=arm);save(diagnostic)
+                    from .feedback_state import await_ready_snapshot
+                    current=await_ready_snapshot(node.snapshot,spin,stage,on_report=save)
+                    diagnostic=start_pose_diagnostic(current,source,stage,plan.get('kind'),arm=arm);save(diagnostic)
                     if not diagnostic['ok']:raise ValueError(diagnostic['message'])
             finally:
                 atomic_json(run/'pose_handoff.json',dict(plan_id=plan.get('plan_id'),phases=handoff_diagnostics))
@@ -192,15 +210,23 @@ def main():
                 from .demo_protocol import check_base_anchor
                 check_base_anchor(list(base_guard.last[1:4]),plan['base_anchor'])
         if preparing:print('路径检查完成；保持当前位置使能，按预检顺序恢复准备姿态。',flush=True)
+        if preloader is not None:
+            native_trajectory_function=preloader.result(spin)
+            preloader.close();preloader=None
+            mark('trajectory_function_ready')
         mark('enable_requested')
         response=node.unlock()
         if not response.success:raise ValueError(response.message)
-        deadline=time.monotonic()+47
+        deadline=time.monotonic()+(8. if vendor_grasp else 47.)
         while not node._hardware_ready:
             spin()
             if not getattr(node,'_hardware_enabled',True):
                 raise ValueError('使能复位已停止：'+getattr(node,'last_lock_reason','请检查硬件状态'))
-            if time.monotonic()>deadline:raise ValueError('保持式使能超时')
+            if time.monotonic()>deadline:
+                diagnostic=start_pose_diagnostic(node.snapshot(),source,'使能稳定等待',plan.get('kind'),arm=arm)
+                handoff_diagnostics['使能稳定等待']=diagnostic
+                atomic_json(run/'pose_handoff.json',dict(plan_id=plan.get('plan_id'),phases=handoff_diagnostics))
+                raise ValueError('保持式使能未稳定，尚未开始运动；'+(diagnostic['message'] or '原厂准备未完成'))
         mark('enable_ready')
         check_start_pose('使能期间')
         if cfg.get('use_position_sync_session',not preparing) or neck_contact_segments or placing or observing:
@@ -209,7 +235,7 @@ def main():
             mark('sync_ready')
             check_start_pose('SYNC切换期间')
             print('保持式位置SYNC已就绪；按预检轨迹分阶段限速。',flush=True)
-        if vendor_grasp:
+        if native_motion:
             response=node.enable_planned_waist(plan)
             if not response.success:raise ValueError(response.message)
         if workspace_reset:
@@ -227,7 +253,7 @@ def main():
             q=node.snapshot()
             if base_guard is not None:base_guard.check()
             if not node._hardware_ready:raise ValueError('控制权/硬件状态失效：'+getattr(node,'last_lock_reason','请检查驱动状态'))
-            fixed=([] if workspace_reset else BODY) if preparing else (BODY[:2] if vendor_grasp else BODY)+NECK+ARMS[other]+[gripper_name(other)]
+            fixed=([] if workspace_reset else BODY) if preparing else (BODY[:2] if native_motion else BODY)+NECK+ARMS[other]+[gripper_name(other)]
             if fixed and max(abs(q[n]-source[n]) for n in fixed)>.7:raise ValueError('固定身体/另一侧关节已移动')
             if observing and abs(q[jaw]-plan['held_gripper_deg'])>8:
                 raise ValueError('观察期间夹爪状态改变，已停止抬手')
@@ -305,7 +331,24 @@ def main():
                 return value
             contact=execute_blocks(node,plan,checked,motion_now,native_close,hold_groups,
                 lambda progress:atomic_json(run/'motion_progress.json',progress),trajectory_function=native_trajectory_function)
-        for index,segment in enumerate([] if workspace_reset or vendor_grasp else plan['segments']):
+        if vendor_place:
+            from .vendor_place_trajectory import execute_blocks as execute_place_blocks
+            def native_release():
+                # release 状态在 checked() 中使用，调用前先转入显式放置阶段。
+                node.preserve_loaded_grippers=False
+                (run/'held_object.json').unlink(missing_ok=True)
+                finish_gripper(start_gripper(cfg['gripper_open_deg']))
+            def release_at_landing():
+                nonlocal released
+                released=True
+                native_release()
+            def endpoint_ok(q,endpoint,landing):
+                return transit_pose_ok(fk.fk('Link_Zero_Point',wrist_frame(cfg),q_for_fk(q,cfg)),
+                    fk.fk('Link_Zero_Point',wrist_frame(cfg),q_for_fk(endpoint,cfg)),plan['tcp'],
+                    position_limit_m=.004 if landing else .008)
+            execute_place_blocks(node,plan,checked,motion_now,release_at_landing,hold_groups,
+                lambda progress:atomic_json(run/'motion_progress.json',progress),endpoint_ok,native_trajectory_function)
+        for index,segment in enumerate([] if workspace_reset or native_motion else plan['segments']):
             if preparing and (segment.get('neck_recovery') or segment.get('supported_neck_recovery')):continue
             print(segment['name']+'…',flush=True)
             path=JointPath(names,segment['waypoints'])
@@ -437,12 +480,13 @@ def main():
         if node and getattr(node,'last_stop_details',None):record['diagnostic']=node.last_stop_details
         print('已停止：'+str(exc),flush=True)
     finally:
+        if preloader is not None:preloader.close()
         if node:
             handoff_ok=True
             if workspace_reset and getattr(node,'_action_state',None):
                 node._cancel_action('复位结束或停止，清除未完成动作')
             retain_grip=bool(vendor_grasp and record.get('status')=='completed' and contact in ('at_target','contact_unconfirmed'))
-            try:hold_groups(node,(['leg_waist'] if workspace_reset else [])+['left_arm','right_arm','neck','grippers'] if preparing else (['leg_waist'] if vendor_grasp else [])+[arm_group]+([] if retain_grip else ['grippers']))
+            try:hold_groups(node,(['leg_waist'] if workspace_reset else [])+['left_arm','right_arm','neck','grippers'] if preparing else (['leg_waist'] if native_motion else [])+[arm_group]+([] if retain_grip else ['grippers']))
             except Exception as exc:
                 handoff_ok=False;print('保持反馈不可用：'+str(exc),flush=True)
             if session is not None:

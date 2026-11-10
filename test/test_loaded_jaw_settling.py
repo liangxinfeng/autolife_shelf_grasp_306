@@ -53,5 +53,6 @@ def test_frozen_feedback_cannot_pass():
 def test_final_receipt_after_sync_exit_in_executor():
     from pathlib import Path
     text=(Path(__file__).parents[1]/'autolife_shelf_grasp_306/execution.py').read_text()
-    assert text.index('handoff_ok=session.close()')<text.index("record['q']=await_loaded_pose")<text.index("atomic_json(run/'held_object.json',record)")
+    # 结束接口已支持 preserve_grippers 参数，检查调用顺序而非旧赋值拼写。
+    assert text.index('session.close(')<text.index("record['q']=await_loaded_pose")<text.index("atomic_json(run/'held_object.json',record)")
     assert "'hold_feedback_confirmed'" in text

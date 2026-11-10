@@ -8,6 +8,7 @@ import time
 import rclpy
 from std_msgs.msg import String
 from std_srvs.srv import SetBool
+from .feedback_state import FeedbackNotReady
 
 
 class PositionSyncSession:
@@ -45,7 +46,12 @@ class PositionSyncSession:
                 raise ValueError('SYNC切换后硬件状态失效，未开始运动')
             stamp=self.node._feedback_monotonic
             if self.node._is_feedback_fresh() and stamp is not None and stamp>accepted:
-                self.node.snapshot()  # 完整关节、离线标志和数值有效性检查。
+                try:self.node.snapshot()  # 完整关节、离线标志和数值有效性检查。
+                except FeedbackNotReady as exc:
+                    stable=None;last=None;count=0
+                    if now>deadline:
+                        raise ValueError('SYNC切换后反馈未恢复，未开始运动；'+str(exc)) from exc
+                    continue
                 if last is None or stamp<last or stamp-last>.15:
                     stable=stamp;count=1
                 elif stamp>last:count+=1
