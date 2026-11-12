@@ -124,3 +124,7 @@ low_object_table_clearance_m: 0.010
 # 低矮物体的夹取位置：0为指根、1为指尖。0.8对应70mm手指前段，保留14mm末端重叠。
 # 仅改变低矮物体抓取参考，不修改高物体或已保存动作的TCP。
 low_object_finger_contact_fraction: 0.80
+
+# 抓取前两指总开口比物品宽度多出的余量，毫米；10表示左右各约5mm。
+# 实测开口达到此要求即衔接抓取，不再等到最大开口；不改变闭合力度。
+grasp_opening_margin_mm: 10.0

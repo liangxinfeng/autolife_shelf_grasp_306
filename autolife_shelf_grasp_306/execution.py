@@ -278,7 +278,9 @@ def main():
             tolerance=2. if closing else open_tolerance(cfg)
             return dict(targets=targets,begin=begin,start=start,closing=closing,history=[],last_log=0.,
                         tolerance=tolerance,arrival=Arrival(targets,tolerance),result=None,
-                        release_width_mm=plan['release_opening_m']*1000 if vendor_place and not closing else None)
+                        release_width_mm=plan['release_opening_m']*1000 if vendor_place and not closing else None,
+                        required_opening_mm=(min(plan['grasp_width_m']*1000+float(cfg.get('grasp_opening_margin_mm',10.)),
+                            float(cfg['gripper_max_width_m'])*1000) if vendor_grasp and not closing else None))
         def poll_gripper(state,q,now):
             if state['result'] is not None:return state['result']
             targets=state['targets'];tolerance=state['tolerance'];closing=state['closing']

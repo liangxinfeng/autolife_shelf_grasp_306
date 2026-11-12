@@ -31,12 +31,17 @@ class WaistAwareCollisionGuard(CollisionGuard):
     def begin_fixed_neck(self, source, goal=None):
         super().begin_fixed_neck(source, goal)
         self.reference_relative = self.relative_fk.fk(TORSO, 'Link_Neck_Pitch_to_Neck_Yaw', source)
+        self._neck_key=tuple(source[n] for n in NECK);self._neck_relative=self.reference_relative
 
     def blocking_pairs(self, pairs, values):
         source = getattr(self, 'fixed_neck_source', None)
         if source is None or any(abs(values[n]-source[n]) > .05 for n in NECK):
             return pairs
-        relative = self.relative_fk.fk(TORSO, 'Link_Neck_Pitch_to_Neck_Yaw', values)
+        # 躯干到颈部链仅依赖颈部关节；颈部数值不变时复用完全相同的FK。
+        key=tuple(values[n] for n in NECK)
+        if key!=self._neck_key:
+            self._neck_relative=self.relative_fk.fk(TORSO, 'Link_Neck_Pitch_to_Neck_Yaw', values);self._neck_key=key
+        relative=self._neck_relative
         if not np.allclose(relative, self.reference_relative, atol=1e-8):
             return pairs
         return [p for p in pairs if p not in self.static_neck_pairs]
@@ -220,10 +225,11 @@ class VendorGraspPlanner(Planner):
             return float(position@up)-half
         start_bottom=bottom(grasp_position,grasp_rotation)
         for block in plan['vendor_blocks']:
-            for a, b in zip(block['waypoints'], block['waypoints'][1:]):
+            for interval,(a,b) in enumerate(zip(block['waypoints'],block['waypoints'][1:])):
                 count = max(2, int(np.ceil(max(abs(b[n]-a[n]) for n in self.names)/.5))+1)
-                for t in np.linspace(0, 1, count):
-                    q = {**source, **{n: a[n]+t*(b[n]-a[n]) for n in self.names}}
+                # 相邻区间共享端点只检查一次，间隔仍不超过原来的0.5度。
+                for t in np.linspace(0,1,count)[1 if interval else 0:]:
+                    q={**source,**{n:(b[n] if t==1 else a[n] if t==0 else a[n]+t*(b[n]-a[n])) for n in self.names}}
                     self.check(q, np.asarray(plan['tcp']), block['carrying'], product)
                     if block['carrying']:
                         position,rotation=self.pose(q,np.asarray(plan['tcp']))

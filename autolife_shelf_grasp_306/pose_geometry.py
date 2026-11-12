@@ -29,24 +29,33 @@ class ModelGeometry:
         roots=links-{j['child'] for j in self.joints}
         if len(roots)!=1:raise AppError('官方URDF根坐标不唯一')
         self.root=roots.pop()
-
-    def frames(self,values):
-        frames={self.root:np.eye(4)};todo=list(self.joints)
-        def angle(j):
-            # 原厂夹爪反馈为电机位置量，不能当成URDF手指角；名义TCP采用模型零位。
-            if 'Gripper' in j['name']:return 0.
-            m=j['mimic']
-            if m:return math.radians(values.get(m['joint'],0))*float(m.get('multiplier',1))+float(m.get('offset',0))
-            return math.radians(values.get(j['name'],0))
+        # URDF拓扑及旋转轴只解析一次；每帧仍用所有当前关节值计算。
+        ordered=[];available={self.root};todo=list(self.joints)
         while todo:
-            ready=[j for j in todo if j['parent'] in frames]
+            ready=[j for j in todo if j['parent'] in available]
             if not ready:raise AppError('官方URDF连杆树不完整')
             for j in ready:
-                t=j['origin'].copy()
-                if j['kind'] in ('revolute','continuous'):
-                    axis=j['axis'];t[:3,:3]=t[:3,:3]@Rotation.from_rotvec(axis/np.linalg.norm(axis)*angle(j)).as_matrix()
-                elif j['kind']=='prismatic':t[:3,3]+=j['axis']*values.get(j['name'],0.)
-                frames[j['child']]=frames[j['parent']]@t;todo.remove(j)
+                ordered.append(j);available.add(j['child']);todo.remove(j)
+        self._ordered=ordered
+        self._rotating=[j for j in ordered if j['kind'] in ('revolute','continuous') and 'Gripper' not in j['name']]
+        self._axes=np.array([j['axis']/np.linalg.norm(j['axis']) for j in self._rotating])
+        self._origins=np.array([j['origin'][:3,:3] for j in self._rotating])
+        for i,j in enumerate(self._rotating):j['rotation_index']=i
+
+    def frames(self,values):
+        angles=[]
+        for j in self._rotating:
+            m=j['mimic']
+            angles.append(math.radians(values.get(m['joint'],0))*float(m.get('multiplier',1))+float(m.get('offset',0))
+                          if m else math.radians(values.get(j['name'],0)))
+        rotations=(self._origins@Rotation.from_rotvec(self._axes*np.asarray(angles)[:,None]).as_matrix()
+                   if angles else [])
+        frames={self.root:np.eye(4)}
+        for j in self._ordered:
+            t=j['origin'].copy()
+            if 'rotation_index' in j:t[:3,:3]=rotations[j['rotation_index']]
+            elif j['kind']=='prismatic':t[:3,3]+=j['axis']*values.get(j['name'],0.)
+            frames[j['child']]=frames[j['parent']]@t
         return frames
 
     def tool_transform(self,side="right"):

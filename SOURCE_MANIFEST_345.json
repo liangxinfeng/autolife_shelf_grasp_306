@@ -170,8 +170,8 @@
       "bytes": 1515
     },
     "autolife_shelf_grasp_306/execution.py": {
-      "sha256": "9281b4a8a572dea560b5a1d643a1b9ec6e693a1d2c5ccadf8ac350b9ce55ea87",
-      "bytes": 37968
+      "sha256": "a07467c9f948f140047b2cce42083cae5804f832aaa418bf7ba6a77d9a21e250",
+      "bytes": 38203
     },
     "autolife_shelf_grasp_306/feedback_refresh.py": {
       "sha256": "fce3c1e983f8d317337ae5925594fbcf1adce1961d9d02f0c2f991e467d52321",
@@ -194,8 +194,8 @@
       "bytes": 3741
     },
     "autolife_shelf_grasp_306/grasp_gripper.py": {
-      "sha256": "686632fabad87511c2b3c298078e396dfd92752dcf55d527dc625d1d48290207",
-      "bytes": 5164
+      "sha256": "b65d65e4b5b3ea63985a533faf9c3b8c24775a1f2c070758ddf5ec68ac4ceab5",
+      "bytes": 5852
     },
     "autolife_shelf_grasp_306/grasp_speed.py": {
       "sha256": "8973bae62858ec0984f4933ad49bbef4a43a5a762bc64866b00c8b5aed0855a0",
@@ -318,8 +318,8 @@
       "bytes": 6732
     },
     "autolife_shelf_grasp_306/pose_collision_scope.py": {
-      "sha256": "1665ee9d0d8aada1b6ee40cd68263d7e2fb8e104e5eabe21ca1f1744f2c08b03",
-      "bytes": 3625
+      "sha256": "2398f6184942af9dc27d6782d671ac91391ccd2a425b402b10c48e98a0c75bef",
+      "bytes": 3969
     },
     "autolife_shelf_grasp_306/pose_execution_bridge.py": {
       "sha256": "87e269e9a1c60d37540ac96bc01bcfb35124c551789fba7a94231af1ec6ce154",
@@ -334,8 +334,8 @@
       "bytes": 2245
     },
     "autolife_shelf_grasp_306/pose_geometry.py": {
-      "sha256": "a2dcad386934ab15ef55a0ed46cfd825010c69a199ed2611a3727fbae9a42973",
-      "bytes": 4633
+      "sha256": "a43da90b924b8dbe1594de5ae495d76e00286832aaf8f4671c916614fd47a5e2",
+      "bytes": 5160
     },
     "autolife_shelf_grasp_306/pose_gripper_intent.py": {
       "sha256": "d00a5cc2a55461a86d34a6df6217ec1c0ea1ddfc0a1883ae2073f41cce696896",
@@ -550,8 +550,8 @@
       "bytes": 16662
     },
     "autolife_shelf_grasp_306/vendor_grasp_planning.py": {
-      "sha256": "d9343a8f4792abfb821fee78d9daa3e91ff7124509321e6db75c0786825b9149",
-      "bytes": 15332
+      "sha256": "a43feb89ea081d4bf7c522f8a8f7ba38f98e7f7b687d9a1a33642de871435549",
+      "bytes": 15846
     },
     "autolife_shelf_grasp_306/vendor_grasp_trajectory.py": {
       "sha256": "e3374dbfc2ca89f74214b252436b49f4f9a880b37ac13c7c35c1580f9739ad4e",
@@ -634,8 +634,8 @@
       "bytes": 1081
     },
     "config/grasp.yaml": {
-      "sha256": "ddffaa96c1a281345c20c2c934c5b32c6a75445222db7b05790b623ff11948ce",
-      "bytes": 4631
+      "sha256": "168dabd06268b818bc7ddcb49f578372cf87d7f1c4aed838641df64b7bca7aeb",
+      "bytes": 4856
     },
     "config/gripper_width.json": {
       "sha256": "b72c02a8675171a8817ea3298b139e6ce334233ecf129160c6d1103eaf5452e0",
@@ -1364,6 +1364,10 @@
     "urdf/robot_v3_1_simplified.urdf": {
       "sha256": "118ba602bd1b0a0964d6d149d095f0825231613218faf7b38f08b35742e72e17",
       "bytes": 33399
+    },
+    "test/test_handoff_speed.py": {
+      "sha256": "0695ebd543164840418df18d423b57e4128eab5b361b068cda262a56a7435d9f",
+      "bytes": 4647
     }
   },
   "publication_overrides": {
@@ -1379,12 +1383,14 @@
     "backups"
   ],
   "note": "Source snapshot; external runtime dependencies and service extensions documented separately. Not a standalone offline installer.",
-  "updated_from_commit": "3f7e44fd7a9cfbf5f4c309995208c28e3898b723",
+  "updated_from_commit": "182a4d9b78836a8194304a3b6dc685f1014fddab",
   "validation": {
-    "software_tests": 613,
+    "software_tests": 634,
     "live_motion_test": false,
     "formal_imports_passed": true,
     "user_data_unchanged": true,
-    "vendor_service_restarted": false
+    "vendor_service_restarted": false,
+    "offline_same_scene_path_equivalence": true,
+    "visual_path_states": 1039
   }
 }

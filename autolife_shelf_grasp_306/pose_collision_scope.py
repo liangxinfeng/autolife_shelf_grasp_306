@@ -22,6 +22,12 @@ class ArmCollisionScope:
                      for g in self.kin.geom_model.geometryObjects]
         if not any(self.moving):raise ValueError('碰撞模型未包含所选手臂几何')
         self.cache=set();self.source=None;self.fixed_pairs=[]
+        self._links=[]
+        for joint in geometry.joints:
+            if joint['name'] not in self.kin.joint_q:continue
+            name=joint['child']
+            if not self.kin.model.existFrame(name):raise ValueError('碰撞模型缺少连杆：'+name)
+            self._links.append((name,self.kin.model.getFrameId(name)))
     def begin(self,source):
         self.source=dict(source);self.cache.clear();self.fixed_pairs=[]
         raw=self.configuration(source)
@@ -29,13 +35,12 @@ class ArmCollisionScope:
         frames=self.geometry.frames(source)
         pin.forwardKinematics(self.kin.model,self.kin.data,raw)
         pin.updateFramePlacements(self.kin.model,self.kin.data)
-        for joint in self.geometry.joints:
-            if joint['name'] not in self.kin.joint_q:continue
-            name=joint['child']
-            if not self.kin.model.existFrame(name):raise ValueError('碰撞模型缺少连杆：'+name)
-            pose=self.kin.data.oMf[self.kin.model.getFrameId(name)].homogeneous
-            if not np.allclose(pose,frames[name],atol=1e-6):
-                raise ValueError('显示与碰撞模型的安装关系不一致：'+name)
+        # 同样核对每个连杆，批量比较避免每条路径重复上万次numpy入口。
+        actual=np.array([self.kin.data.oMf[index].homogeneous for _,index in self._links])
+        expected=np.array([frames[name] for name,_ in self._links])
+        matches=np.isclose(actual,expected,atol=1e-6).all(axis=(1,2))
+        if not matches.all():
+            raise ValueError('显示与碰撞模型的安装关系不一致：'+self._links[int(np.flatnonzero(~matches)[0])][0])
     def configuration(self,values):
         from autolife_handeye_calibration_306.auto_plan_worker import GROUPS
         if self.source is None:raise ValueError('未绑定本次末端示教参考姿态')

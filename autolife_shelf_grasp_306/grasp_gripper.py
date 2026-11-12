@@ -46,8 +46,16 @@ def execute(node,cfg,arm,state,checked,clock,hold,report,object_width_m):
     evidence=ClosingEvidence(start[jaw],goal,object_width_m*1000,widths,positions) if closing else None
     # 放置不等精确位置目标：开口覆盖物品及退出间隙即可衔接收回。
     release_width=state.get('release_width_mm')
+    opening_width=state.get('required_opening_mm')
+    if opening_width is not None:
+        margin=float(cfg.get('grasp_opening_margin_mm',10.))
+        if not math.isfinite(margin) or not 0<margin<=30:raise ValueError('抓取预张开余量应为0～30毫米（不含0）')
+        expected=min(object_width_m*1000+margin,float(widths[-1]))
+        if (closing or not math.isfinite(opening_width) or not math.isclose(opening_width,expected,abs_tol=1e-6)):
+            raise ValueError('抓取预张开计划与物品宽度不一致')
+    clear_width=release_width if release_width is not None else opening_width
     target_width=float(np.interp(goal,positions[::-1],widths[::-1]))
-    if release_width is not None and (closing or not math.isfinite(release_width) or not 0<release_width<=target_width):
+    if clear_width is not None and (closing or not math.isfinite(clear_width) or not 0<clear_width<=target_width):
         raise ValueError('物品释放所需开口超出夹爪范围，请重新规划')
     stable=None;last_send=-float('inf');last_report=-float('inf');command=start[jaw]
     # 本执行器独占夹爪指令。其他手的夹爪保持本段开始时的实际开度。
@@ -64,16 +72,16 @@ def execute(node,cfg,arm,state,checked,clock,hold,report,object_width_m):
             node._last_operator_activity=time.monotonic();last_send=now
         result=None
         if closing:result=evidence.update(now,q[jaw],command)
-        elif (abs(command-goal)<1e-6 and abs(q[jaw]-goal)<=state['tolerance'] if release_width is None else
+        elif (abs(command-goal)<1e-6 and abs(q[jaw]-goal)<=state['tolerance'] if clear_width is None else
                 math.isfinite(q[jaw]) and positions[-1]-state['tolerance']<=q[jaw]<=positions[0] and
-                float(np.interp(q[jaw],positions[::-1],widths[::-1]))>=release_width):
+                float(np.interp(q[jaw],positions[::-1],widths[::-1]))>=clear_width):
             if stable is None:stable=now
-            if now-stable>=.2:result='released' if release_width is not None else 'at_target'
+            if now-stable>=.2:result='released' if release_width is not None else 'opening_clear' if opening_width is not None else 'at_target'
         else:stable=None
         if now-last_report>=.2:
             report(dict(targets_deg=targets,commanded_deg=command,measured_deg={n:q[n] for n in targets},
                 nominal_width_mm=float(np.interp(q[jaw],positions[::-1],widths[::-1])),
-                release_width_mm=release_width,
+                release_width_mm=release_width,required_opening_mm=opening_width,
                 closing=closing,time=now,phase='ramping' if abs(command-goal)>1e-6 else 'settling'))
             last_report=now
         if result:
