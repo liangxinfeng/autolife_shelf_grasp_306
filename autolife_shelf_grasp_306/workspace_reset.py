@@ -68,7 +68,7 @@ def build_plan(planner,source):
     planner.guard.cache.clear();count=0;neck_notes=[]
     from .reset_collision_scope import reset_path_scope
     for curve in curves:
-        # 每段独立登记；首段偏角归正未满足兼容条件，必须完整检查。
+        # 每段独立登记既有模型重叠；不添加抬头中间动作。
         with reset_path_scope(planner.guard,curve['start'],curve['target']) as notes:
             path=JointPath(list(BODY_JOINTS),[curve['start'],curve['target']])
             for q in path.checks():

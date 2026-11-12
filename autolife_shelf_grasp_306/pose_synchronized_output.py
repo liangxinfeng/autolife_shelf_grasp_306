@@ -21,7 +21,9 @@ def before_tick(node):
     dt=max(0.,min(.04,now-clock['last']));clock['last']=now
     duration=seg['seconds']/(state['record']['speed_percent']/100.)
     request=min(1.,clock['progress']+dt/duration)
-    state['frame_started']=now-request*duration
+    # 终点避免大数时间戳相减得到0.999999999，永远进不了到位检查。
+    started=now-request*duration
+    state['frame_started']=math.nextafter(started,-math.inf) if request>=1. else started
     if now>state['frame_deadline']:
         node._cancel_action('同步姿态超过原有到位期限，已停止；未跳过关节跟随检查')
 

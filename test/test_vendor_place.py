@@ -13,7 +13,7 @@ def fixture(side='right'):
     names=BODY[2:]+ARMS[side];points=[]
     for value in (0.,1.,2.,0.):
         q=dict(source);q[names[0]]=value;q[names[2]]=value;points.append(q)
-    plan=dict(kind='place',place_protocol_version=4,execution_backend='vendor_place_trajectory_v1',
+    plan=dict(release_opening_m=.080,kind='place',place_protocol_version=4,execution_backend='vendor_place_trajectory_v1',
         ik_backend='autolife_robot_sdk.KdlSolver.nr_jl',controlled_joints=names,source_q=source,
         waist_bounds_deg={n:[-12.,12.] for n in BODY[2:]},config={'arm':side},
         native_checked_states=1,table_height_checked=True,segments=[])

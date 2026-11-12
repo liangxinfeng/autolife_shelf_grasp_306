@@ -117,13 +117,8 @@ def test_stability_drift_gap_and_goal_change_reset():
 
 
 def receipt_class(tmp_path):
-    import autolife_shelf_grasp_306.action_studio as module
-    tree=ast.parse(Path(module.__file__).read_text())
-    cls=next(n for n in ast.walk(tree) if isinstance(n,ast.ClassDef) and n.name=='ReceiptBridge')
-    scope=dict(JointBridge=JointBridge,self=NS(owner=NS(run=tmp_path)),time=time,json=json,
-               __name__=module.__name__,__package__=module.__package__)
-    exec(compile(ast.Module(body=[cls],type_ignores=[]),str(module.__file__),'exec'),scope)
-    return scope['ReceiptBridge']
+    from autolife_shelf_grasp_306.pose_execution_bridge import make_bridge
+    return make_bridge(JointBridge,NS(owner=NS(run=tmp_path)))
 
 
 def test_receipt_holds_only_affected_arm_and_next_frame_starts_measured(tmp_path):

@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 NAME_GROUPS=(
- 'bottle. beverage can. cup. mug. bowl. plate. box. bag. tissue. towel. clothing. sponge.',
+ 'bottle. beverage can. cup. mug. bowl. plate. box. bag. tissue paper. crumpled tissue. crumpled paper. towel. clothing. sponge.',
  'mobile phone. mouse. remote control. charger. cable. scissors. tape roll. pen. book. key. glasses.',
  'apple. banana. orange. toy. stuffed toy. clothes hanger. spoon. fork. kettle. detergent bottle. trash can.')
 

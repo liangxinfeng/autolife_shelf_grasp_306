@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import numpy as np
+from .low_object_grasp import grasp_scope
 import pinocchio as pin
 from scipy.spatial.transform import Rotation
 from autolife_handeye_calibration_306.core import ARMS, BODY, NECK, TORSO, Kinematics
@@ -182,6 +183,7 @@ class VendorGraspPlanner(Planner):
         except BaseException:
             self.close();raise
 
+    @grasp_scope
     def plan(self, source, tcp, center, product):
         self.configure_source(source)
         try:

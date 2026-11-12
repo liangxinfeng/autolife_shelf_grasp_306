@@ -35,15 +35,15 @@ def build(record,entry):
                 if a*b>0:vel[k][n]=np.sign(a)*min(abs(a),abs(b))
         return [dict(start=points[i],target=points[i+1],v0=vel[i],v1=vel[i+1],seconds=t,
                      coefficients=coefficients(points[i],points[i+1],vel[i],vel[i+1],t)) for i,t in enumerate(times)]
-    segments=make();factor=1.;grid=np.linspace(0.,1.,129)
+    from .trajectory_extrema import peak_absolute
+    segments=make();factor=1.
     for s in segments:
         c=s['coefficients'];t=s['seconds']
         for order in (1,2,3):
             c=c[1:]*np.arange(1,len(c))[:,None]
-            sampled=sum(c[i,:,None]*grid**i for i in range(len(c)))
-            # A derivative bound controls the gap between adjacent samples.
-            lip=sum(i*np.abs(c[i]) for i in range(1,len(c)))
-            bound=(np.max(np.abs(sampled),axis=1)+lip/256.)/t**order
+            # 五次曲线导数为低阶多项式，求真实峰值而不是粗Lipschitz上界。
+            # 原上界会把一个合法夹爪动作夸大为1.75倍，再拖慢整段双臂动作。
+            bound=np.array([peak_absolute(c[:,j]) for j in range(len(ALL_JOINTS))])/t**order
             for j,n in enumerate(ALL_JOINTS):factor=max(factor,(bound[j]/limits(n)[order-1])**(1/order))
     if factor>1.000001:
         for f in record['keyframes']:
@@ -70,4 +70,12 @@ def plan(record,entry,directory):
     from .teaching_motion import stage_action
     staged,phases=stage_action(record,entry)
     staged,segments=build(staged,entry)
+    # 身体段保持上一阶段夹持意图；不要把持物开口当作新的松爪目标。
+    for segment,phase in zip(segments,phases):
+        segment['hold_grippers']=phase[1]=='关节到位并停稳'
+        segment['gripper_command_timing']=True
+    for i,segment in enumerate(segments):
+        # 反向点速度必须过零，但不等于需要到点后停留。夹爪交互点除外。
+        segment['continuous_boundary']=(i+1<len(segments) and staged['keyframes'][i]['hold_sec']==0
+            and segment['hold_grippers'] and segments[i+1]['hold_grippers'])
     return staged,segments,phases

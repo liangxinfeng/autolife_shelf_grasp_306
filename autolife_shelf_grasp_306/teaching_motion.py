@@ -94,6 +94,11 @@ def compile_action(draft,entry=None):
     return full_record(record)
 
 
+# DM位置量不是毫米或关节角；0.5编码单位约小于0.2毫米。
+# 仅用于离散姿态串去除保存反馈抖动，不改变原姿态文件、手动指令或连续录制。
+GRIPPER_POSE_NOISE = .5
+
+
 def stage_action(record,entry):
     """Body arrival -> verified settle -> jaws -> dwell, for preview and execution.
 
@@ -103,7 +108,12 @@ def stage_action(record,entry):
     record=full_record(record);previous=checked_joints(entry);rows=[];phases=[]
     for repeat in range(record['loop_count']):
         for i,f in enumerate(record['keyframes']):
-            target=dict(f['joints_deg']);body=dict(target)
+            target=dict(f['joints_deg'])
+            # 与最后一个实际保留的目标比较，不能逐帧吞掉累计的小幅开合。
+            # 未构成开合事件时保持旧夹持意图，不能让执行器再追逐反馈噪声。
+            for n in GRIPPER_JOINTS:
+                if abs(target[n]-previous[n])<=GRIPPER_POSE_NOISE:target[n]=previous[n]
+            body=dict(target)
             body.update({n:previous[n] for n in GRIPPER_JOINTS})
             jaw_change=any(abs(target[n]-previous[n])>.001 for n in GRIPPER_JOINTS)
             rows.append(dict(joints_deg=body,transition_sec=duration(previous,body,100,

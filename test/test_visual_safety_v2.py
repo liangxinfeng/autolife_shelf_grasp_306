@@ -46,7 +46,7 @@ def test_closing_completion_does_not_hide_other_faults(fault):
 
 def test_manual_clamp_finishes_but_keeps_target_and_other_hand(monkeypatch):
     clock=[10.];monkeypatch.setattr('time.monotonic',lambda:clock[0])
-    b=node();b._hardware_ready=True;b._communication_lost_joints=lambda _:[];b._gripper_pub=object()
+    b=node();b._hardware_ready=True;b._hardware_enabled=True;b._communication_lost_joints=lambda _:[];b._gripper_pub=object()
     sent=[];receipts=[];b._publish_vendor=lambda pub,packet:sent.append(packet)
     n='Joint_Right_Gripper'
     e=NS(job=dict(targets={n:220.},speed=.5,token='grip'),bridge=b,gripper_targets={'Joint_Left_Gripper':150.},

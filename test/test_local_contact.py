@@ -63,7 +63,7 @@ def test_planner_local_fallback_retains_full_product_and_virtual_center():
     def route(q,tcp,goal,obj,flexible,started,yaw,profile):
         calls.append((tcp,goal,obj,flexible))
         return dict(tcp=np.asarray(tcp).tolist(),product=obj)
-    stub=SimpleNamespace(cfg=c,pose=lambda q,tcp:(np.zeros(3),np.eye(3)),_route=route)
+    stub=SimpleNamespace(candidates=lambda yaws:((yaw,False,'direct') for yaw in yaws),cfg=c,pose=lambda q,tcp:(np.zeros(3),np.eye(3)),_route=route)
     plan=Planner._local_contact_plan(stub,source,physical,center,p,0.)
     assert plan['grasp_contact_mode']=='front_local' and not calls[0][3]
     assert plan['product']['bbox_extents_m']==p['bbox_extents_m']
@@ -77,6 +77,6 @@ def test_local_geometry_never_bypasses_path_collision():
     from types import SimpleNamespace
     c=cfg();c['T_wrist_tool_quat_xyzw']=[0,0,0,1]
     def route(*args):raise CollisionFailure('机器人自碰撞')
-    stub=SimpleNamespace(cfg=c,pose=lambda *args:(np.zeros(3),np.eye(3)),_route=route)
+    stub=SimpleNamespace(candidates=lambda yaws:((yaw,False,'direct') for yaw in yaws),cfg=c,pose=lambda *args:(np.zeros(3),np.eye(3)),_route=route)
     with pytest.raises(ValueError,match='开度已通过.*自碰撞'):
         Planner._local_contact_plan(stub,{},np.zeros(3),np.zeros(3),product(),0.)

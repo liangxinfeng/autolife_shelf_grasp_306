@@ -16,9 +16,27 @@ class NavigationRuntime:
     def __init__(self, run, emit, map_owners):
         self.run=Path(run);self.emit=emit;self.thread=None;self.error='';self.started=0.
         self.map_owners=map_owners;self.process=None
+        self.log_offset=0;self.log_tail='' 
 
     @property
     def starting(self):return self.thread is not None and self.thread.is_alive()
+
+    def check_health(self):
+        """启动父进程存活不代表关键子节点成功，明确报告而非永久等待定位。"""
+        if self.process is None:return
+        if self.process.poll() is not None:
+            self.error='导航后台已退出，请重新点击启动导航';return
+        path=self.run/'navigation_backend.log'
+        try:
+            with path.open('rb') as stream:
+                stream.seek(self.log_offset);data=stream.read(131072);self.log_offset=stream.tell()
+            text=self.log_tail+data.decode('utf-8','replace')
+            lines=text.split('\n');self.log_tail=lines.pop()[-4096:]
+            for line in lines:
+                if 'process has died' in line:
+                    self.error='导航子进程启动失败：'+line[:350]
+                    break
+        except OSError:pass
 
     def start(self, map_path):
         if os.environ.get('ROS_DOMAIN_ID','0')!='0':raise ValueError('非机器人ROS域，不允许启动真实导航后台')
@@ -61,6 +79,7 @@ class NavigationRuntime:
                     raise ValueError('仍有其他定位或底盘仲裁进程，请在控制中心服务页检查残留后台')
                 if not Path(map_path).is_file():raise ValueError('当前地图文件不存在')
                 with (self.run/'navigation_backend.log').open('ab',buffering=0) as stream:
+                    self.log_offset=stream.tell();self.log_tail=''
                     process=subprocess.Popen(['/usr/bin/python3','/opt/ros/jazzy/bin/ros2','launch',
                         'control_center_navigation','bringup_all.launch.py','open_navigation_ui:=false',
                         'text_voice_robot_id:=345','text_voice_ros_domain_id:=0','map_yaml:='+map_path,

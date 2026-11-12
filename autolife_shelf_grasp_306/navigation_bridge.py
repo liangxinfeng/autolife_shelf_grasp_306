@@ -50,6 +50,7 @@ def main():
         ('list',ListWaypoints,'/list_waypoints'),('navigate',NavigateToWaypoint,'/navigate_to_waypoint'),
         ('pause',Trigger,'/pause_navigation'),('resume',Trigger,'/resume_navigation'),
         ('stop_ready',Trigger,'/navigation_stop_ready'),
+        ('rearm',Trigger,'/control_center/rearm_vr_navigation'),
         ('nomotion',Empty,'/request_nomotion_update'),
         ('cancel',Trigger,'/cancel_navigation'),('load',LoadMap,'/map_server/load_map'),
         ('switch',SwitchWaypointMap,'/switch_waypoint_map'),
@@ -57,6 +58,8 @@ def main():
         ('cancel_localization',Trigger,'/cartographer_global_relocalization/cancel')]}
     latest={};odom=None;odom_stamp=None;nav_bool=False;actions={};names=[];map_meta=None;arm=None
     localization_status={};obstacle_meta=None;obstacle_time=0.
+    nav2_readiness={};nav2_readiness_time=0.
+    guard={};guard_time=0.;rearm_future=None;rearm_sent=0.
     arm_history=deque(maxlen=160)
     goal=None;ack=False;arrived=False;stable=None;cancel_reason=None;cancel_sent=False
     pause=NavigationPause();last_pause_tick=time.monotonic()
@@ -67,6 +70,27 @@ def main():
     from .task_flow import NavigationSettling
     localization_gate=LocalizationGate();pose_reason='等待定位坐标'
     redis_client=redis.Redis(socket_timeout=.15,socket_connect_timeout=.15)
+    def readiness(m):
+        nonlocal nav2_readiness,nav2_readiness_time
+        try:
+            value=json.loads(m.data)
+            if not isinstance(value,dict) or type(value.get('ready')) is not bool:return
+            nav2_readiness=value;nav2_readiness_time=time.monotonic()
+        except (ValueError,TypeError):pass
+    def guard_status(m):
+        nonlocal guard,guard_time
+        try:
+            value=json.loads(m.data)
+            if type(value.get("navigation_allowed")) is not bool:return
+            guard=value;guard_time=time.monotonic()
+        except (ValueError,TypeError,AttributeError):pass
+    def guard_reason():
+        if guard and time.monotonic()-guard_time<2. and not guard.get("navigation_allowed"):
+            return guard.get("detail", "等待导航保护就绪")+"；停稳后点击启动导航重新确认"
+        return ""
+    def navigation_ready():
+        return (clients['navigate'].service_is_ready() and time.monotonic()-nav2_readiness_time<3.
+                and nav2_readiness.get('ready') is True)
     def status(m):
         nonlocal latest,arrived,cancel_reason
         try:
@@ -160,6 +184,8 @@ def main():
     from .voice_settings import read_proximity_voice
     initial_publisher=node.create_publisher(PoseWithCovarianceStamped,'/initialpose',qos)
     node.create_subscription(String,'/waypoints/navigation_status',status,qos)
+    node.create_subscription(String,'/navigation/readiness',readiness,qos)
+    node.create_subscription(String,'/control_center/motion_guard_status',guard_status,qos)
     node.create_subscription(String,'/global_relocalization/status',localization,qos)
     node.create_subscription(PoseWithCovarianceStamped,'/initialpose',initial_pose,qos)
     node.create_subscription(PoseWithCovarianceStamped,'/amcl_pose',amcl_pose,qos)
@@ -193,7 +219,7 @@ def main():
         while running and rclpy.ok():
             rclpy.spin_once(node,timeout_sec=.025);now=time.monotonic()
             (run/'navigation_bridge_heartbeat').touch()
-            if not (run/'heartbeat').exists() or time.time()-(run/'heartbeat').stat().st_mtime>1.5:
+            if not (run/'heartbeat').exists() or time.time()-(run/'heartbeat').stat().st_mtime>4.:
                 stopping=True
                 if goal:cancel_reason='抓取界面心跳中断，已请求取消本次导航'
             if goal and (run/'stop').exists():cancel_reason=cancel_reason or '用户停止演示'
@@ -203,6 +229,14 @@ def main():
             if not stopping and now-last_voice_publish>=.5:
                 proximity_publisher.publish(Bool(data=read_proximity_voice(run/'voice_settings.json')))
                 last_voice_publish=now
+            if rearm_future is not None and (rearm_future.done() or now-rearm_sent>3.):
+                try:
+                    if not rearm_future.done():raise ValueError('导航恢复确认超时，请稍后重新点击启动导航')
+                    response=rearm_future.result()
+                    if not response.success:raise ValueError(response.message)
+                    emit('nav_message',text=response.message+'；旧目标不会自动继续')
+                except Exception as exc:emit('nav_error',text=str(exc))
+                rearm_future=None
             if stopping and not goal and pending is None and not runtime.starting:break
             try:
                 try:cmd=commands.get_nowait()
@@ -221,9 +255,15 @@ def main():
                     if action=='quit':stopping=True
                 elif action=='start_navigation':
                     if goal or pending or map_op or busy() or not still():raise ValueError('请停止任务并等待底盘停稳后启动导航')
-                    if clients['navigate'].service_is_ready():emit('nav_message',text='已连接现有导航后台，无需重复启动')
+                    if clients['navigate'].service_is_ready():
+                        if guard_reason():
+                            if rearm_future is not None:raise ValueError('正在确认导航恢复，请稍候')
+                            rearm_future=call('rearm',Trigger.Request());rearm_sent=now
+                            emit('nav_message',text='正在确认心跳、旧目标取消和底盘停稳；不自动续跑')
+                        else:emit('nav_message',text='已连接现有导航后台，无需重复启动')
                     else:runtime.start(active_map())
                 elif action=='navigate':
+                    if guard_reason():raise ValueError(guard_reason())
                     if map_fault:raise ValueError('地图切换尚未完整确认，请重新加载地图后再开始')
                     if goal or pending or map_op or busy():raise ValueError('其他导航或地图操作仍在进行，未接管')
                     if not still() or pose() is None:raise ValueError('底盘尚未停稳或定位未就绪')
@@ -242,6 +282,7 @@ def main():
                         record=json.loads((run/('prepare_result.json' if cmd['leg']=='to_shelf' else 'demo_grasp_result.json')).read_text())
                         if record.get('status') not in ('prepared','completed'):raise ValueError('前一机械臂阶段未完成')
                     check_arm(record['q'])
+                    if not navigation_ready():raise ValueError(nav2_readiness.get('reason','导航正在初始化，请等待定位与控制器激活'))
                     req=NavigateToWaypoint.Request();req.name=cmd['name']
                     goal={**cmd,'step_posture':step_posture,'expected_q':record['q'],'progress':GoalProgress(req.name,node.get_clock().now().nanoseconds/1e9)}
                     waiting_navigation=None
@@ -293,7 +334,11 @@ def main():
                 try:
                     response=future.result()
                     if kind=='navigate':
-                        if not response.success:raise ValueError(response.message)
+                        if not response.success:
+                            # 明确拒绝意味着没有启动目标，无需再取消一个不存在的任务。
+                            emit('nav_done',success=False,leg=goal['leg'],run_id=goal['run_id'],text=response.message)
+                            goal=None
+                            raise ValueError(response.message)
                         ack=True
                         emit('nav_started',run_id=goal['run_id'],leg=goal['leg'])
                     elif kind=='load':
@@ -391,17 +436,16 @@ def main():
                 list_future=None
             if now-last_publish>.5:
                 last_publish=now
-                if runtime.process is not None and runtime.process.poll() is not None:
-                    runtime.error='导航后台已退出，请查看 navigation_backend.log 后重试'
+                runtime.check_health()
                 try:current_map=active_map()
                 except Exception:current_map=''
                 current_pose=pose()
                 snapshot=dict(maps=map_catalog(),active_map=current_map,names=names,
                      library=waypoint_poses(None),waypoints=waypoint_poses(names),pose=current_pose,meta=map_meta,
-                     ready=clients['navigate'].service_is_ready() and not map_fault,busy=bool(goal or pending or map_op or waiting_navigation or busy()),
+                     ready=navigation_ready() and not map_fault and not guard_reason(),guard_reason=guard_reason(),readiness_reason=nav2_readiness.get('reason','等待导航后台'),busy=bool(goal or pending or map_op or waiting_navigation or busy()),
                      localization_ready=clients['relocalize'].service_is_ready(),localization=localization_status,
                      startup_error=runtime.error,
-                     starting=runtime.starting or bool(runtime.started and not runtime.error and now-runtime.started<45 and not clients['navigate'].service_is_ready()),
+                     starting=runtime.starting or bool(runtime.started and not runtime.error and not navigation_ready() and not guard_reason() and now-runtime.started<90.),
                      obstacle_meta=obstacle_meta if now-obstacle_time<3 else None,
                      service_ready=clients['navigate'].service_is_ready(),map_fault=map_fault,
                      pose_reason=pose_reason,localization_pending=localization_gate.pending,

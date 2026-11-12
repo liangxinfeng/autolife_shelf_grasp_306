@@ -173,6 +173,7 @@ def depth_cloud(frame, mask, config, step=2):
 def stages(center, yaw, config):
     from .bottle import horizontal_basis
     n,_,up=horizontal_basis(config['up_torso'],yaw); p=np.asarray(center,float)
+    n=np.asarray(config.get('grasp_approach_direction',n),float)
     lifted=p+up*config['lift_m']
     return [('预抓取',p-config['pregrasp_m']*n),('抓取',p.copy()),
             ('抬起',lifted),('收回',lifted-config['withdraw_m']*n)]

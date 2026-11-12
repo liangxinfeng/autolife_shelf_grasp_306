@@ -79,16 +79,12 @@ def test_cached_feedback_new_goal_and_frame_reset_window():
 def test_real_editor_bridge_uses_full_open_receipt(tmp_path):
     import ast,json,time
     from pathlib import Path
-    import autolife_shelf_grasp_306.action_studio as module
-    cls=next(n for n in ast.walk(ast.parse(Path(module.__file__).read_text()))
-             if isinstance(n,ast.ClassDef) and n.name=='ReceiptBridge')
+    from autolife_shelf_grasp_306.pose_execution_bridge import make_bridge
     class Base:
         _action_target_reached=JointBridge._action_target_reached
         def _event(self,*args):pass
-    scope=dict(JointBridge=Base,self=NS(owner=NS(run=tmp_path)),time=time,json=json,
-               __name__=module.__name__,__package__=module.__package__)
-    exec(compile(ast.Module(body=[cls],type_ignores=[]),str(module.__file__),'exec'),scope)
-    b,goal=fixture();bridge=object.__new__(scope['ReceiptBridge'])
+    cls=make_bridge(Base,NS(owner=NS(run=tmp_path)))
+    b,goal=fixture();bridge=object.__new__(cls)
     bridge.__dict__.update(b.__dict__)
     bridge._hardware_enabled=bridge._hardware_ready=True
     bridge._action_state.update(stage='transition',progress=1.,name='test',

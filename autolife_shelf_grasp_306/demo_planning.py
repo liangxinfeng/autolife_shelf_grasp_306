@@ -149,6 +149,18 @@ class TableGuard:
                                             planner.cfg.get('gripper_max_width_m',.095))
                 self.jaw_envelope=(fcl.Box(*map(float,high-low)),(low+high)/2)
                 break
+        self.complete_jaw=None
+        if planner.cfg.get('geometry_source')=='urdf' and planner.cfg.get('urdf_path'):
+            # 与低物体抓取共用完整手指开合几何，替代与实际工具坐标无关的45mm球。
+            from .gripper_contact_geometry import gripper_geometry
+            from scipy.spatial import ConvexHull
+            vertices=gripper_geometry(planner)['vertices'];hull=ConvexHull(vertices)
+            shape=fcl.BVHModelOBBRSS();shape.beginModel(len(hull.simplices),len(vertices))
+            points=fcl.StdVec_Vec3s();triangles=fcl.StdVec_Triangle()
+            for vertex in vertices:points.append(vertex)
+            for a,b,c in hull.simplices:triangles.append(fcl.Triangle(int(a),int(b),int(c)))
+            shape.addSubModel(points,triangles);shape.endModel()
+            self.complete_jaw=(shape,(vertices.min(0),vertices.max(0)))
         self.obstacles=[]
         for box in table.get('obstacles',[]):
             low=np.array(box['minimum']);high=np.array(box['maximum'])
@@ -227,7 +239,11 @@ class TableGuard:
                 test(obj.geometry,t.rotation,t.translation,p.guard.boxes[i],obj.name)
         wrist=kin.data.oMf[p.guard.frame];center=wrist.translation+wrist.rotation@self.tcp
         physical_center=center-wrist.rotation@np.asarray(self.product.get('object_center_offset_wrist',[0.,0.,0.]))
-        if self.jaw_envelope is None:
+        if self.complete_jaw is not None:
+            shape,bounds=self.complete_jaw
+            test(shape,wrist.rotation,wrist.translation,bounds,label='完整手指开合范围',scope='table')
+            test(self._sphere_shape,np.eye(3),physical_center,label='夹爪障碍包络',scope='clutter')
+        elif self.jaw_envelope is None:
             test(self._sphere_shape,np.eye(3),physical_center,label='夹爪保守包络')
         else:
             shape,offset=self.jaw_envelope

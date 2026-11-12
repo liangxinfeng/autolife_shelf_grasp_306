@@ -4,6 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from .core import crop_object, match,product_category
+from .grounded_sam2 import semantic_display_name
 
 
 def model_paths(cfg, root):
@@ -163,6 +164,6 @@ class Perception:
                 m=match(feature,products,self.cfg['match_threshold'],self.cfg['match_margin'])
                 p=next((v for v in store.products if v['id']==m['id']),None)
                 item.update(id=candidate,feature=feature,product=p,match=m,
-                            name=p['name'] if p else ('未录入 · '+item['semantic_label'] if item.get('semantic_label') else '未录入 / 待确认'))
+                            name=p['name'] if p else ('未录入 · '+semantic_display_name(item['semantic_label']) if item.get('semantic_label') else '未录入 / 待确认'))
         self.previous=[{'id':v['id'],'box':v['box']} for v in items]
         return items,round((time.monotonic()-start)*1000,1)

@@ -19,15 +19,34 @@ class ManualHoldSession(PositionSyncSession):
             self.vendor_state=value;self.vendor_stamp=time.monotonic()
         except (ValueError,TypeError,KeyError):self.vendor_state=None
 
-    def begin(self):
+    def begin(self,refreshed=None):
         n=self.node;self.started=time.monotonic();self.future=None;self.accepted_at=None;self.stable=None
         if not n._is_feedback_fresh():raise ValueError('等待本机关节反馈')
         from .pose_feedback_read import PoseFeedbackRead
-        self.reader=PoseFeedbackRead(n);self.anchor=None
+        self.reader=None;self.anchor=None
+        if refreshed is None:self.reader=PoseFeedbackRead(n)
+        else:
+            # 执行器刚完成主动硬件读取，不能再重复创建6组读取服务。
+            from control_center_joint_control.joint_definitions import ALL_JOINTS
+            if set(refreshed)!=set(ALL_JOINTS):raise ValueError('复用读取缺少完整关节')
+            if any(not math.isfinite(float(v)) or not math.isfinite(float(n._current.get(k,float('nan')))) or abs(float(n._current[k])-float(v))>(2. if 'Gripper' in k else .5) for k,v in refreshed.items()):
+                raise ValueError('主动读取与当前反馈不一致，未进入保持会话')
+            self.anchor=dict(n._current)
         # 仅软件标记准备中，不调用旧的逐组电机模式/使能流程，不下发运动。
+        n.last_lock_reason=''
         n._hardware_enabled=True;n._hardware_ready=False;n._hardware_prepare=None
         n._hardware_unlock_mode='without_reset';n._leg_waist_enabled=False
         n._last_operator_activity=self.started;n._preview=dict(n._current)
+
+    def enter_prepared(self,spin,refreshed):
+        """原厂保持入口自身完成使能；不先调用第二套逐组使能。"""
+        if self.requires_grasp_finish:
+            deadline=time.monotonic()+2.
+            while not self.finish_client.service_is_ready():
+                spin()
+                if time.monotonic()>deadline:raise ValueError('抓取保持交接服务未就绪')
+        self.begin(refreshed=refreshed)
+        while not self.poll():spin()
 
     def poll(self):
         n=self.node;now=time.monotonic()

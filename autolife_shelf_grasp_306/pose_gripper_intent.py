@@ -3,6 +3,32 @@ import math,time
 from control_center_joint_control.joint_definitions import GRIPPER_JOINTS,JOINT_LIMITS
 
 
+def stable_held_grippers(node,state,targets):
+    """身体段未改变夹持意图：容忍小开口残差，但仍验证通信与稳定。
+
+    仅供标记为hold_grippers的阶段；不能用于判定新松爪目标已释放。
+    5个编码单位沿用开口稳定容差，不扩大身体关节的到位容差。
+    """
+    if not node._is_feedback_fresh() or state.get('progress',0.)<1.:return False
+    observed={}
+    for n,target in targets.items():
+        actual=float(node._current[n]);command=float(state['commanded_values'].get(n,float('nan')))
+        detail=node._details.get(n,{})
+        if detail.get('communication_lost',True) or not all(map(math.isfinite,(actual,command,float(target)))):return False
+        if abs(command-target)>.05:return False
+        if n in GRIPPER_JOINTS:
+            segment=node.teaching_segments[state['frame_index']]
+            if abs(segment['start'][n]-target)>.001 or abs(actual-target)>5.:return False
+            observed[n]=actual
+        elif abs(actual-target)>float(node.get_parameter('goal_tolerance_deg').value):return False
+    if not observed:return False
+    stamp=float(node._feedback_monotonic);old=state.get('held_jaw_settle');key=tuple(sorted(targets.items()))
+    if old is None or old['key']!=key or stamp<old['last'] or stamp-old['last']>.2 or any(abs(v-old['q'][n])>1. for n,v in observed.items()):
+        state['held_jaw_settle']=dict(key=key,q=observed,start=stamp,last=stamp,count=1);return False
+    if stamp>old['last']:old['last']=stamp;old['count']+=1
+    return old['count']>=4 and stamp-old['start']>=.4
+
+
 def stable_closing(node,state,targets,commands,starts):
     if not node._is_feedback_fresh():return False
     observed={};has_closing=False
@@ -57,9 +83,9 @@ def manual_tick(engine):
     b._publish_vendor(b._gripper_pub,dict(left_gripper_target_joints_position=[commands['Joint_Left_Gripper']],right_gripper_target_joints_position=[commands['Joint_Right_Gripper']]))
     b._last_operator_activity=time.monotonic()
     if u<1:return
-    closing=any(j['targets'][n]>j['jaw_start'][n]+.1 or j['targets'][n]>b._current[n]+2 for n in j['targets'])
-    if closing:done=stable_closing(b,j,j['targets'],commands,j['jaw_start'])
-    else:done=all(abs(b._current[n]-v)<=5. for n,v in j['targets'].items())
+    from .pose_jaw_timing import issued
+    j.update(progress=u,loop_index=0,frame_index=0,commanded_values=commands)
+    done=issued(b,j,{},j['targets'])
     if not done:return
     engine.gripper_targets={**held,**j['targets']};engine.job=None;engine.panel.setEnabled(True)
-    engine.completed.emit(j['token'],True,'夹爪目标已发送并保持；已结束等待。实际开口可能由物体限制，未据此判定抓牢。' if closing else '夹爪已张开到位')
+    engine.completed.emit(j['token'],True,'夹爪指令已按时序发送完成并保持；未核验实际开口或夹持结果')

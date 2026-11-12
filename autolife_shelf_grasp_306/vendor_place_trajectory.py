@@ -58,6 +58,9 @@ def validate_blocks(plan):
             plan.get('ik_backend')!='autolife_robot_sdk.KdlSolver.nr_jl' or
             not plan.get('native_checked_states') or not plan.get('table_height_checked')):
         raise ValueError('放置缺少原厂腰臂轨迹及桌面预检')
+    width=float(plan.get('release_opening_m',0.))
+    if not np.isfinite(width) or not 0<width<=float(plan['config'].get('gripper_max_width_m',.09)):
+        raise ValueError('放置计划缺少物品释放开口，请重新规划')
     validate_reset_reference(plan['config'])
     names=BODY[2:]+ARMS[plan['config']['arm']];source=plan['source_q']
     if plan.get('controlled_joints')!=names:raise ValueError('放置腰臂顺序无效')

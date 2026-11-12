@@ -74,8 +74,8 @@ class TeachingStudio(Q.QWidget):
         except Exception:
             if self.engine.bridge is None:self._unlock()
             raise
-    def adjust_posture(self,token,setting):
-        self._acquire();self.engine.adjust_posture(token,setting)
+    def adjust_posture(self,token,setting,*,keep_session=False):
+        self._acquire();self.engine.adjust_posture(token,setting,keep_session=keep_session)
     def prepare_posture(self,token):
         self._acquire();self.engine.prepare_posture(token)
     def _completed(self,token,ok,text):

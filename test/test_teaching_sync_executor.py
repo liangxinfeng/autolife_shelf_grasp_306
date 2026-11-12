@@ -21,6 +21,8 @@ def test_actual_executor_gates_playback_and_reports_exit(monkeypatch,tmp_path,ex
         def poll(self):self.verified=self.ready;return self.ready
         def close(self):self.closed=True;return exit_ok
     monkeypatch.setattr('autolife_shelf_grasp_306.pose_manual_session.ManualHoldSession',Session)
+    # 全身使能后的反馈门控另由test_pose_reliability检验；此处验证执行器生命周期。
+    monkeypatch.setattr('autolife_shelf_grasp_306.pose_start_ready.ready',lambda *args:True)
     q=pose();b=NS(_current=q,_details={n:dict(speed=0.) for n in q},_is_feedback_fresh=lambda:True,
         _action_state=None,_active_goals={},_hardware_prepare=None,_hardware_enabled=True,_hardware_ready=True,
         outcome=None,_last_event='',_instance_lock_handle=None,_event=lambda *a:None,destroy_node=lambda:None,

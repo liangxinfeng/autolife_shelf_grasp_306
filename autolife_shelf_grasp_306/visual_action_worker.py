@@ -224,9 +224,11 @@ class VisualActions:
             return dict(binding=value,diagnostics=dict(method='stored_initial_reference'))
         if action!='visual_correct':raise ValueError('未知物体参照操作')
         from .task_flow import full_record
+        started=time.perf_counter();timings={}
         record=full_record(cmd['record']);bindings=record_bindings(record)
         if not bindings:raise ValueError('当前动作没有关联物体的姿态')
         self.robot.refresh_measured();base=self.robot.base_sample();frame,source,T=self.sample()
+        timings['feedback_capture_sec']=time.perf_counter()-started;stage_started=time.perf_counter()
         current=None;observations={};diagnostics=[]
         for ident in dict.fromkeys(v['reference'] for v in bindings.values()):
             self.cancelled(cmd);meta,arrays=self.store.load(ident)
@@ -240,6 +242,7 @@ class VisualActions:
             distance=float(np.linalg.norm(new[:3,3]-old[:3,3]));angle=float(np.degrees(Rotation.from_matrix(delta[:3,:3]).magnitude()))
             if distance>.20 or angle>30:raise ValueError(f'参照变化{distance*1000:.0f}mm/{angle:.1f}°超出本版局部纠偏范围（200mm/30°），请调整停靠位置')
             observations[ident]=(old,new);diagnostics.append(dict(reference=ident,name=meta['name'],offset_mm=((new[:3,3]-old[:3,3])*1000).tolist(),angle_deg=angle,**stats))
+        timings['recognition_sec']=time.perf_counter()-stage_started;stage_started=time.perf_counter()
         result=clone_without_bindings(record);previous=source;checked=0
         from .pose_ik_worker import PoseSolver
         for i,row in enumerate(result['keyframes']):
@@ -254,21 +257,28 @@ class VisualActions:
                 solved=solver.calculate(dict(operation='solve',source=row['joints_deg'],seed=previous,target=target.tolist()))
                 row['joints_deg'].update(solved['joints']);checked+=solved['checked_states']
             previous=row['joints_deg']
+        timings['ik_sec']=time.perf_counter()-stage_started;stage_started=time.perf_counter()
         # 复用实际执行器的C2平滑/夹爪时序，并检查平滑后的整条路径。
         from .teaching_trajectory import plan,evaluate
         staged,segments,_=plan(result,source,self.store.directory.parent)
         sides={v['side'] for v in bindings.values()}
+        from .visual_path_sampling import sample_count
+        # 当前模型采用固定夹爪包络；若模型增加夹爪轴则保留其采样。
+        model_names=set().union(*(set(self.solvers[side].planner.guard.kin.joint_q) for side in sides))
         for seg in segments:
-            n=max(2,int(np.ceil(max(abs(seg['target'][k]-seg['start'][k]) for k in source)/.25)))
+            n=sample_count(seg,model_names)
             for u in np.linspace(0,1,n+1):
                 self.cancelled(cmd);q=evaluate(seg,float(u))
                 for side in sides:
                     guard=self.solvers[side].planner.guard
                     guard.begin(q);guard.check(q)
                 checked+=1
+        timings['path_check_sec']=time.perf_counter()-stage_started;stage_started=time.perf_counter()
         self.stable(source,base);self.cancelled(cmd)
+        timings['final_validation_sec']=time.perf_counter()-stage_started
+        timings['total_sec']=time.perf_counter()-started
         from .core import atomic_json
         image=self.run/'visual_action_current.png';cv2.imwrite(str(image),frame['image'])
-        report=dict(record=result,source=source,base_anchor=base,diagnostics=diagnostics,checked_states=checked,created=time.monotonic(),image=str(image),shape=list(frame['image'].shape))
+        report=dict(record=result,source=source,base_anchor=base,diagnostics=diagnostics,timings=timings,checked_states=checked,created=time.monotonic(),image=str(image),shape=list(frame['image'].shape))
         atomic_json(self.run/'visual_action_last_preview.json',report)
         return report

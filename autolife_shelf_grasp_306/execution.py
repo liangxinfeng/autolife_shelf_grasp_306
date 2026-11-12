@@ -215,26 +215,36 @@ def main():
             preloader.close();preloader=None
             mark('trajectory_function_ready')
         mark('enable_requested')
-        response=node.unlock()
-        if not response.success:raise ValueError(response.message)
-        deadline=time.monotonic()+(8. if vendor_grasp else 47.)
-        while not node._hardware_ready:
-            spin()
-            if not getattr(node,'_hardware_enabled',True):
-                raise ValueError('使能复位已停止：'+getattr(node,'last_lock_reason','请检查硬件状态'))
-            if time.monotonic()>deadline:
-                diagnostic=start_pose_diagnostic(node.snapshot(),source,'使能稳定等待',plan.get('kind'),arm=arm)
-                handoff_diagnostics['使能稳定等待']=diagnostic
-                atomic_json(run/'pose_handoff.json',dict(plan_id=plan.get('plan_id'),phases=handoff_diagnostics))
-                raise ValueError('保持式使能未稳定，尚未开始运动；'+(diagnostic['message'] or '原厂准备未完成'))
-        mark('enable_ready')
-        check_start_pose('使能期间')
-        if cfg.get('use_position_sync_session',not preparing) or neck_contact_segments or placing or observing:
-            session=PositionSyncSession(node,preserve_gripper_targets=bool(placing or observing))
-            session.requires_grasp_finish=vendor_grasp;session.enter(spin)
-            mark('sync_ready')
+        if native_motion:
+            # 抓取/放置共用已验证的单次保持式接管；原厂入口同时完成使能和SYNC。
+            from .pose_manual_session import ManualHoldSession
+            session=ManualHoldSession(node,preserve_gripper_targets=bool(placing or observing))
+            session.requires_grasp_finish=vendor_grasp
+            session.enter_prepared(spin,refreshed)
+            mark('enable_ready');mark('sync_ready')
             check_start_pose('SYNC切换期间')
-            print('保持式位置SYNC已就绪；按预检轨迹分阶段限速。',flush=True)
+            print('单次保持式接管已就绪；未重复逐组使能。',flush=True)
+        else:
+            response=node.unlock()
+            if not response.success:raise ValueError(response.message)
+            deadline=time.monotonic()+(8. if vendor_grasp else 47.)
+            while not node._hardware_ready:
+                spin()
+                if not getattr(node,'_hardware_enabled',True):
+                    raise ValueError('使能复位已停止：'+getattr(node,'last_lock_reason','请检查硬件状态'))
+                if time.monotonic()>deadline:
+                    diagnostic=start_pose_diagnostic(node.snapshot(),source,'使能稳定等待',plan.get('kind'),arm=arm)
+                    handoff_diagnostics['使能稳定等待']=diagnostic
+                    atomic_json(run/'pose_handoff.json',dict(plan_id=plan.get('plan_id'),phases=handoff_diagnostics))
+                    raise ValueError('保持式使能未稳定，尚未开始运动；'+(diagnostic['message'] or '原厂准备未完成'))
+            mark('enable_ready')
+            check_start_pose('使能期间')
+            if cfg.get('use_position_sync_session',not preparing) or neck_contact_segments or placing or observing:
+                session=PositionSyncSession(node,preserve_gripper_targets=bool(placing or observing))
+                session.requires_grasp_finish=vendor_grasp;session.enter(spin)
+                mark('sync_ready')
+                check_start_pose('SYNC切换期间')
+                print('保持式位置SYNC已就绪；按预检轨迹分阶段限速。',flush=True)
         if native_motion:
             response=node.enable_planned_waist(plan)
             if not response.success:raise ValueError(response.message)
@@ -264,10 +274,11 @@ def main():
             if observing:raise ValueError('观察姿态阶段禁止开合夹爪')
             begin=checked();start=motion_now()
             targets=explicit_targets if explicit_targets is not None else gripper_targets(arm,angle,begin,both=both)
-            if not vendor_grasp:node.apply('grippers',targets,speed_scale=cfg.get('gripper_speed_scale',.5))
+            if not native_motion:node.apply('grippers',targets,speed_scale=cfg.get('gripper_speed_scale',.5))
             tolerance=2. if closing else open_tolerance(cfg)
             return dict(targets=targets,begin=begin,start=start,closing=closing,history=[],last_log=0.,
-                        tolerance=tolerance,arrival=Arrival(targets,tolerance),result=None)
+                        tolerance=tolerance,arrival=Arrival(targets,tolerance),result=None,
+                        release_width_mm=plan['release_opening_m']*1000 if vendor_place and not closing else None)
         def poll_gripper(state,q,now):
             if state['result'] is not None:return state['result']
             targets=state['targets'];tolerance=state['tolerance'];closing=state['closing']
@@ -287,10 +298,10 @@ def main():
                 raise ValueError(f'夹爪未稳定到位（容差{tolerance:.1f}°）：'+details)
             return None
         def finish_gripper(state):
-            if vendor_grasp:
+            if native_motion:
                 from .grasp_gripper import execute as execute_gripper
                 return execute_gripper(node,cfg,arm,state,checked,motion_now,hold_groups,
-                    lambda value:atomic_json(run/'gripper_progress.json',value),plan['grasp_width_m'])
+                    lambda value:atomic_json(run/'gripper_progress.json',value),plan.get('grasp_width_m',0.))
             while state['result'] is None:poll_gripper(state,checked(),motion_now())
             return state['result']
         opening=None

@@ -39,7 +39,7 @@ def test_appearance_only_supplement_never_supplies_metric_pose():
     def embed(crops):
         calls.append(len(crops))
         return np.array([[1.,0],[0,1]]) if len(crops)==2 else np.array([[0.,1]])
-    p=SimpleNamespace(embed=embed,segmenter=SimpleNamespace(proposals=lambda *args:[dict(mask=mask,box=[0,0,20,20])]))
+    p=SimpleNamespace(embed=embed,segmenter=SimpleNamespace(proposals=lambda *args,**kwargs:[dict(mask=mask,box=[0,0,20,20])]))
     views=[({'object_pose':np.eye(4).tolist()},item),({'metric_registered':False,'camera_pose':'must not read'},item)]
     store=SimpleNamespace(view_ids=lambda ident:['root','view'])
     match=ObjectAppearanceMemory(p,{}).recognize(store,'root',views,{'image':image})

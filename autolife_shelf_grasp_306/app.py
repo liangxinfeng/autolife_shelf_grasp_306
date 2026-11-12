@@ -233,7 +233,7 @@ class Window(DemoNavigation,Q.QWidget):
         self.mask_toggle=Q.QCheckBox('分割轮廓');self.mask_toggle.setChecked(True)
         self.mask_toggle.setToolTip('显示模型的物体分割结果；取消勾选查看原图。不改变深度定位或规划使用的掩膜。')
         self.mask_toggle.toggled.connect(self.toggle_masks);heading.addWidget(self.mask_toggle)
-        self.semantic=Q.QLineEdit();self.semantic.setPlaceholderText('物品名称：盒子 / 瓶子 / 纸巾（颜色可选）')
+        self.semantic=Q.QLineEdit();self.semantic.setPlaceholderText('名称或外观：纸团 / 揉皱的纸巾 / 白色海绵')
         self.semantic.setToolTip('只输入名称识别同类不同颜色物品；加颜色可缩小范围。留空使用当前模式默认范围，品牌仍用商品库匹配。')
         right.addWidget(self.semantic)
         self.semantic_apply=Q.QPushButton('按描述识别');self.semantic_apply.clicked.connect(self.change_prompt)
@@ -537,7 +537,7 @@ class Window(DemoNavigation,Q.QWidget):
             self.mode.blockSignals(True);self.mode.setCurrentIndex(max(0,self.mode.findData(data['mode'])));self.mode.blockSignals(False)
         if 'semantic_prompt' in data:self.semantic.setText(data['semantic_prompt'])
         if 'semantic_prompt_resolved' in data:
-            self.semantic.setToolTip('实际识别描述：'+data['semantic_prompt_resolved']+'\n只输入名称即可；颜色是可选筛选条件，品牌由商品库匹配。')
+            self.semantic.setToolTip('实际识别描述：'+data['semantic_prompt_resolved']+'\n支持名称、颜色和揉皱/压扁等形态；纸巾与纸巾盒分别识别。品牌由商品库匹配。')
         if kind=='ready':
             self.ready=True;self.vision_error='';self.capability_note.setText('视觉已就绪 · 支持识别抓取、预录制动作与航点导航');self.blockers=data['blockers'];self.status.setText('识别已就绪，可直接识别，或输入物品描述。')
             self.execute.setToolTip('；'.join(self.blockers))
@@ -616,11 +616,13 @@ class Window(DemoNavigation,Q.QWidget):
             self.pending_plan=data
             self.overlay_revision=data.get('request_id',self.request);self.path_revision=self.overlay_revision
             self.frozen=True;self.video.pix=G.QPixmap(str(self.run/'scene.jpg'));self.video.shape=data['shape'];self.video.boxes=[];self.video.path=data['pixels']
-            mode='柔性夹取' if data.get('orientation_mode')=='flexible' else '水平夹取'
+            mode=(f'低物体俯角 {data.get("approach_pitch_deg",0):.0f}° 夹取' if data.get('orientation_mode')=='pitched' else
+                  '柔性夹取' if data.get('orientation_mode')=='flexible' else '水平夹取')
             retreat=data.get('withdraw_yaw_deg',0.)
             retreat_text=f' · 收回转向 {retreat:+.0f}°' if retreat else ''
             if data.get('withdraw_orientation_mode')=='adaptive':retreat_text=' · 自然收回'
             if data.get('withdraw_orientation_mode')=='fixed_carry':retreat_text=' · 固定持物姿态'
+            if data.get('low_object_grasp_raise_m',0)>.001:mode+=f' · 抓点上移 {data["low_object_grasp_raise_m"]*1000:.0f}mm'
             self.status.setText(f'{target["name"]} · {mode} · 接近 {data.get("approach_yaw_deg",0):.0f}°{retreat_text} · {data["seconds"]:.1f}s')
             hand='右手' if data.get('arm')=='right' else '左手'
             provisional=bool(data.get('tool_geometry',{}).get('provisional'))

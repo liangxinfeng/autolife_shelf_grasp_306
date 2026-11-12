@@ -25,20 +25,44 @@ ALIASES={'瓶子':'bottle','饮料':'beverage bottle','饮料瓶':'beverage bott
          '毛绒玩具':'stuffed toy','西瓜玩具':'watermelon shaped toy','衣架':'clothes hanger',
          '洗衣液':'laundry detergent bottle','洗衣液瓶':'laundry detergent bottle','洗发水':'shampoo bottle',
          '箱子':'box','包装盒':'packaged box','抽纸':'tissue pack','纸巾包':'tissue pack','矿泉水':'water bottle'}
+# 日常说法映射到物体本体，不将纸巾扩展为其包装容器。
+ALIASES.update({
+    '纸团':'crumpled paper','废纸团':'crumpled paper','一团纸':'crumpled paper',
+    '纸巾团':'crumpled tissue','卫生纸团':'crumpled tissue','餐巾纸团':'crumpled tissue',
+    '纸':'paper','废纸':'waste paper','卫生纸':'toilet paper','餐巾纸':'paper napkin',
+    '面巾纸':'facial tissue','散装纸巾':'tissue paper','散开的纸巾':'tissue paper',
+    '抽纸盒':'tissue box','抽纸包':'tissue pack','湿巾':'wet wipe','湿纸巾':'wet wipe',
+    '海绵':'sponge','清洁海绵':'cleaning sponge','洗碗海绵':'dish sponge',
+    '抹布':'cleaning cloth','布':'cloth','布团':'crumpled cloth','布料':'fabric',
+    '袜子':'sock','手套':'glove','口罩':'face mask',
+    '塑料瓶盖':'plastic bottle cap','瓶盖':'bottle cap','包装袋':'packaging bag',
+    '零食袋':'snack bag','垃圾袋':'trash bag','塑料包装':'plastic packaging',
+    '刷子':'brush','牙刷':'toothbrush','梳子':'comb','洗手液':'hand soap bottle',
+    '球':'ball','乒乓球':'ping pong ball','橡皮':'eraser','橡皮擦':'eraser',
+    '垃圾盖':'trash bin lid','垃圾桶盖':'trash bin lid','垃圾桶':'trash bin',
+    '垃圾投口':'trash opening','柜门':'cabinet door','抽屉':'drawer',
+    '螺丝刀':'screwdriver','螺丝':'screw','扳手':'wrench',
+})
 COLORS={'红色':'red','绿色':'green','蓝色':'blue','黄色':'yellow','白色':'white','黑色':'black',
         '灰色':'gray','银色':'silver','金色':'gold','粉色':'pink','粉红色':'pink','紫色':'purple',
         '橙色':'orange','棕色':'brown','透明':'transparent',
         '红':'red','绿':'green','蓝':'blue','黄':'yellow','白':'white','黑':'black'}
 MODIFIERS={**COLORS,'塑料':'plastic','金属':'metal','木制':'wooden','玻璃':'glass',
+           '揉成团的':'crumpled','揉成团':'crumpled','揉皱的':'crumpled','揉皱':'crumpled',
+           '皱巴巴的':'crumpled','皱巴巴':'crumpled','皱的':'crumpled','皱':'crumpled',
+           '压扁的':'flattened','压扁':'flattened','空的':'empty','空':'empty',
            '无线':'wireless','有线':'wired','小号':'small','大号':'large','小':'small','大':'large'}
 
 
 def translate_phrase(phrase):
     """Deterministic local noun+attribute mapping; never drop unknown constraints."""
     if not re.search(r'[\u3400-\u9fff]',phrase):return phrase
-    for prefix in ('请帮我识别一下','帮我识别一下','请识别一下','识别一下','请帮我识别','帮我识别','请识别','识别'):
+    for prefix in ('请帮我找一下','帮我找一下','请找一下','找一下','请帮我识别一下','帮我识别一下','请识别一下','识别一下','请帮我识别','帮我识别','请识别','识别'):
         if phrase.startswith(prefix):phrase=phrase[len(prefix):].strip();break
     phrase=re.sub(r'\s+','',phrase)
+    if phrase not in ALIASES:
+        for quantifier in ('一个','一张','一块','一只','一瓶'):
+            if phrase.startswith(quantifier):phrase=phrase[len(quantifier):];break
     attributes=[];remaining=phrase
     while remaining:
         if remaining in ALIASES:return ' '.join(attributes+[ALIASES[remaining]])
@@ -77,7 +101,7 @@ def prompt_for(cfg,mode):
 NAME_VARIANTS={
     'box':('box','carton','packaged box','tissue box'),
     'bottle':('bottle','water bottle','beverage bottle'),
-    'tissue':('tissue','tissue paper','tissue pack','tissue box'),
+    'tissue':('tissue paper','crumpled tissue'),
     'bag':('bag','paper bag','plastic bag'),
     'can':('can','beverage can','tin can'),
     'mouse':('computer mouse','mouse'),
@@ -88,7 +112,12 @@ def detection_query(text,cfg):
     normalized=normalize_prompt(text);phrases=normalized.rstrip('.').split('. ') if normalized else []
     expanded=[];generic=bool(phrases) and all(p in NAME_VARIANTS for p in phrases)
     for phrase in phrases:
-        for variant in NAME_VARIANTS.get(phrase,(phrase,)):
+        variants=NAME_VARIANTS.get(phrase,(phrase,))
+        if phrase.endswith(' tissue') and 'crumpled' not in phrase:
+            prefix=phrase[:-len('tissue')]
+            variants=(prefix+'tissue paper',)
+            if 'crumpled' not in prefix:variants+=(prefix+'crumpled tissue',)
+        for variant in variants:
             if variant not in expanded:expanded.append(variant)
     # Keep the query bounded; never omit one of the user's requested categories.
     if len(expanded)>24:expanded=phrases
@@ -100,8 +129,11 @@ def detection_query(text,cfg):
 
 def category_label_matches(requested,label):
     phrases=normalize_prompt(requested).rstrip('.').split('. ')
+    tokens=set(re.findall(r'[a-z]+',str(label).lower()))
+    tissue_only=bool(phrases) and all(p=='tissue' or p.endswith(' tissue') or p.endswith('tissue paper') or p.endswith('paper napkin') for p in phrases)
+    if tissue_only and tokens&{'box','pack','package','container','dispenser'}:return False
     if not phrases or not all(p in NAME_VARIANTS for p in phrases):return True
-    anchors={'box':{'box','carton'},'bottle':{'bottle'},'tissue':{'tissue'},
+    anchors={'box':{'box','carton'},'bottle':{'bottle'},'tissue':{'tissue','napkin'},
              'bag':{'bag'},'can':{'can'},'mouse':{'mouse'}}
     tokens=set(re.findall(r'[a-z]+',str(label).lower()))
     return any(tokens&anchors[p] for p in phrases)
@@ -197,3 +229,13 @@ class GroundedSAM2:
         self.timings={'grounding_ms':round((grounded-start)*1000,1),'segmentation_ms':round((time.monotonic()-grounded)*1000,1),
                       'prompt':text,'requested_prompt':requested,'box_threshold':threshold,'candidates':len(selected)}
         return items
+
+
+def semantic_display_name(label):
+    """中文仅用于展示，保留原始模型标签用于追踪和后续匹配。"""
+    label=str(label).strip()
+    display={'crumpled paper':'纸团','crumpled tissue':'纸巾团','tissue paper':'纸巾',
+             'paper napkin':'餐巾纸','tissue box':'纸巾盒','tissue pack':'纸巾包'}
+    if label in display:return display[label]
+    matches=[cn for cn,en in ALIASES.items() if en==label]
+    return min(matches,key=len) if matches else label

@@ -13,6 +13,7 @@ IDLE=SUCCESS|FAILED|{'idle','waiting','sequence_succeeded'}
 def navigation_summary(data,inflight=False):
     if data.get('map_fault'):return '地图切换未完成，请重新加载地图'
     if data.get('startup_error'):return data['startup_error']
+    if data.get('guard_reason'):return data['guard_reason']
     if data.get('localization_pending'):
         return '等待本轮定位确认；可在放大地图中查看或手动重定位'
     nav=data.get('navigation',{})
@@ -22,7 +23,11 @@ def navigation_summary(data,inflight=False):
             if '占用' in text or '目标可达' in text:text+='；请放大地图核对定位与桌柜距离，未更改原航点'
             return text
     if data.get('ready') and data.get('pose'):return '导航已连接 · 定位正常'
+    if data.get('pose') and data.get('service_ready') and not data.get('ready'):
+        return data.get('readiness_reason') or '定位已确认，等待导航控制器激活'
     if data.get('localization_ready'):
+        if data.get('pose') and not data.get('service_ready'):
+            return '定位已确认，但航点服务未启动；请检查导航后台日志'
         state=data.get('localization',{}).get('state')
         return {'matching':'正在搜索全地图位置…','failed':'全局定位未成功，请重试或手动定位',
                 'waiting_scans':'等待双激光数据…','waiting':'等待地图和激光数据…',

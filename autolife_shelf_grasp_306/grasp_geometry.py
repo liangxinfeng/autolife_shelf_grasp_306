@@ -34,6 +34,15 @@ def nominal_profile(cfg,fk):
                 T_mount_camera=optical.tolist(),T_wrist_tool=tool.tolist())
 
 
+def same_nominal_camera(a,b):
+    if not (is_nominal(a) and is_nominal(b)):return False
+    keys=('geometry_version','urdf_sha256','T_mount_camera')
+    fields=('robot_id','head_offsets_deg')
+    return (all(k in a and k in b and a[k]==b[k] for k in keys)
+            and all(k in a.get('config',{}) and k in b.get('config',{})
+                    and a['config'][k]==b['config'][k] for k in fields))
+
+
 def profile_digest(data):
     return hashlib.sha256(json.dumps(data,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
 

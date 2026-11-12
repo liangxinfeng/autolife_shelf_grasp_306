@@ -23,7 +23,8 @@ image_size: 640
 confidence: 0.3
 grounded_sam2_prompts:
   beverages: bottle. beverage can. cup.
-  all: bottle. cup. can. bag. box. watermelon.
+  # “识别全部”的常见物体范围；按描述识别不受此列表限制。最多16个短语。
+  all: bottle. cup. can. bag. box. watermelon. crumpled tissue. crumpled paper. sponge. cloth. mobile phone. mouse. remote control. key. pen. book.
 recognition_hz: 3.0
 match_threshold: 0.72
 match_margin: 0.06
@@ -112,3 +113,14 @@ vendor_grasp_waist_range_deg: [12.0, 8.0]
 # 整段时间规划上限，单位度/秒；不是修改原厂电机增益，实际速度由驱动限幅。
 vendor_grasp_arm_speed_deg_s: 60.0
 vendor_grasp_waist_speed_deg_s: 20.0
+
+# 矮物体：完整估计高度小于此值时从斜上方抓取，单位米（0.10=10厘米）。
+low_object_height_m: 0.10
+# 从较小俯角开始，按本机夹爪网格与局部桌面间隙选择；单位度，向下为正。
+low_object_pitch_candidates_deg: [35.0, 45.0, 55.0, 65.0, 75.0]
+# 夹爪实体相对局部支撑面的最小规划间隙，单位米；还额外计入IK误差余量。
+low_object_table_clearance_m: 0.010
+
+# 低矮物体的夹取位置：0为指根、1为指尖。0.8对应70mm手指前段，保留14mm末端重叠。
+# 仅改变低矮物体抓取参考，不修改高物体或已保存动作的TCP。
+low_object_finger_contact_fraction: 0.80

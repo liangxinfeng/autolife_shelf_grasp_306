@@ -174,12 +174,13 @@ class NavigationPanel(Q.QWidget):
             self.refill(self.product,[(p['name'],p['id']) for p in products if p.get('geometry','cylinder')=='cylinder' and .08<=p['height_m']<=.4],self.saved.get('product_id'))
         except (ValueError,OSError,KeyError):pass
     def controls(self,idle):
-        allowed=idle and not self.data.get('busy',False) and not self.data.get('starting',False)
+        # 导航初始化等待定位时，仍必须允许手动定位/换图，不能互相锁死。
+        allowed=idle and not self.data.get('busy',False)
         self.edit_allowed=allowed
         for widget in (self.maps,self.load,self.front,self.shelf,self.product):widget.setEnabled(allowed)
-        self.load.setEnabled(allowed and self.data.get('ready',False))
+        self.load.setEnabled(allowed and self.data.get('service_ready',False))
         self.locate.setEnabled(allowed and self.data.get('localization_ready',False))
-        self.start_button.setEnabled(allowed and not self.data.get('ready',False))
+        self.start_button.setEnabled(allowed and not self.data.get('ready',False) and not self.data.get('starting',False))
         self.start_button.setText('导航已连接' if self.data.get('ready') else '启动中…' if self.data.get('starting') else '启动导航')
         if self.dialog:self.dialog.refresh()
     def show_map(self):
@@ -252,6 +253,8 @@ class NavigationPanel(Q.QWidget):
         with (self.owner.run/'navigation.log').open('ab') as stream:stream.write(bytes(self.proc.readAllStandardError()))
     def finished(self):
         self.inflight=False
+        self.data.update(ready=False,starting=False,service_ready=False,snapshot_time=0.,startup_error='导航连接已关闭，请重新打开抓取窗口')
+        self.owner.controls()
         self.info.setText('导航连接已关闭')
         if self.owner.demo_active:self.owner.demo_failure('导航连接中断，未继续抓放；请在控制中心确认底盘已停止')
         workflow=getattr(self.owner,'workflow',None)

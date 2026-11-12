@@ -6,6 +6,7 @@ claimed to have been checked.
 """
 import time
 import numpy as np
+from .low_object_grasp import grasp_scope
 import pinocchio as pin
 from scipy.optimize import least_squares
 from scipy.spatial.transform import Rotation, Slerp
@@ -216,6 +217,8 @@ class Planner:
         except ValueError as exc:
             if '碰撞' in str(exc) or '包络' in str(exc):raise CollisionFailure(str(exc)) from exc
             raise
+        from .low_object_grasp import check_clearance
+        check_clearance(self,q,tcp,product)
         if carrying:
             # Conservative held-bottle envelope against the body/other arm.
             # Use the collision-model frame (not torso-frame coordinates).
@@ -246,7 +249,10 @@ class Planner:
                 distance=fcl.distance(bottle,transform,obj.geometry,fcl.Transform3f(t.rotation,t.translation),fcl.DistanceRequest(),fcl.DistanceResult())
                 if distance<.005:raise CollisionFailure('携带饮料可能碰到机器人：'+obj.name)
 
+    @grasp_scope
     def plan(self,source,tcp,center,product):
+        from .low_object_grasp import enabled,support
+        if enabled(product,self.cfg):product=support(product,center,self.cfg['up_torso'])
         self.guard.begin_fixed_neck(source)
         started=time.monotonic();failures=[];late_failures=set()
         self.candidate_failures=failures
@@ -283,6 +289,11 @@ class Planner:
 
     def _local_contact_plan(self,source,tcp,center,product,started):
         from .local_contact import candidates
+        from .low_object_grasp import enabled
+        if enabled(product,self.cfg):
+            from .gripper_contact_geometry import contact_tcp
+            old_offset=np.asarray(product.get('object_center_offset_wrist',[0.,0.,0.]))
+            tcp=contact_tcp(self,np.asarray(tcp)-old_offset)+old_offset
         choices=candidates(product,self.cfg)
         if not choices:raise ValueError('整体及前端局部夹取区域都超过夹爪开度，或前端有效插入深度不足')
         toolR=Rotation.from_quat(self.cfg['T_wrist_tool_quat_xyzw']).as_matrix()
@@ -291,8 +302,8 @@ class Planner:
         self.candidate_failures=prior_failures
         for choice in choices:
             f,s,u=horizontal_basis(self.cfg['up_torso'],np.deg2rad(self.cfg['approach_yaw_deg']+choice['yaw']))
-            base=np.column_stack([f,s,u]);rotations=[base@toolR.T,base@np.diag([1.,-1.,-1.])@toolR.T]
-            desired=min(rotations,key=lambda r:Rotation.from_matrix(R0.T@r).magnitude())
+            from .low_object_grasp import orientation
+            desired,_,_,_,_=orientation(self,source,tcp,center,product,np.deg2rad(self.cfg['approach_yaw_deg']+choice['yaw']),adjust_height=True)
             offset=desired.T@(-choice['contact']);virtual=np.asarray(tcp)+offset
             local={**product,'object_center_offset_wrist':offset.tolist(),
                    'local_contact_torso':choice['contact'].tolist(),
@@ -308,7 +319,7 @@ class Planner:
                 self._candidate_stage=0
                 try:
                     plan=self._route(source,virtual,center,local,False,started,yaw,profile)
-                    plan.update(physical_tcp=np.asarray(tcp).tolist(),grasp_contact_mode='front_local',
+                    plan.update(physical_tcp=plan.get('physical_tcp',np.asarray(tcp).tolist()),grasp_contact_mode='front_local',
                                 contact_center=(np.asarray(center)+choice['contact']).tolist(),candidate_failures=failures)
                     return plan
                 except (IKFailure,CollisionFailure) as exc:
@@ -381,7 +392,7 @@ class Planner:
         cfg=self.cfg;self.guard.cache.clear()
         yaw=np.deg2rad(cfg['approach_yaw_deg']+yaw_offset)
         width=product['depth_m'] if product.get('geometry')=='bag_edge' else product['diameter_m']
-        local_contact='object_center_offset_wrist' in product
+        local_contact='local_required_opening_m' in product
         if local_contact:width=product['local_required_opening_m']-.010
         elif 'bbox_axes_torso' in product:width=projected_width(product,horizontal_basis(cfg['up_torso'],yaw)[1])
         if width+.010>cfg['gripper_max_width_m']:raise ValueError('夹取部位过宽，没有足够夹取余量')
@@ -389,6 +400,22 @@ class Planner:
         if 'bbox_axes_torso' in product:
             forward=horizontal_basis(cfg['up_torso'],yaw)[0]
             route_cfg={**cfg,'pregrasp_m':max(cfg['pregrasp_m'],projected_width(product,forward)/2+.05)}
+        from .low_object_grasp import orientation,enabled
+        physical_tcp=np.asarray(tcp)-np.asarray(product.get('object_center_offset_wrist',[0.,0.,0.]))
+        low_contact=enabled(product,cfg)
+        if low_contact:
+            from .gripper_contact_geometry import contact_tcp
+            physical_tcp=contact_tcp(self,physical_tcp)
+            product={**product,'object_center_offset_wrist':product.get('object_center_offset_wrist',[0.,0.,0.])}
+            tcp=physical_tcp+np.asarray(product['object_center_offset_wrist'])
+        desired,approach,pitch,low_clearance,height_shift=orientation(self,source,tcp,center,product,yaw,adjust_height=True)
+        if height_shift:
+            offset=np.asarray(product.get('object_center_offset_wrist',[0.,0.,0.]))-desired.T@np.asarray(cfg['up_torso'])*height_shift
+            product={**product,'object_center_offset_wrist':offset.tolist()}
+            tcp=physical_tcp+offset
+        if pitch:
+            route_cfg={**route_cfg,'grasp_approach_direction':approach.tolist()}
+            flexible=False  # 低物体不允许柔性朝向退回水平伸入。
         st=stages(center,yaw,route_cfg)
         continuous=cfg.get('fixed_carry_enabled',False) and cfg.get('carry_return_mode')=='continuous_reset'
         if continuous:st=st[:3]  # No mandatory 20 cm withdrawal detour.
@@ -411,11 +438,6 @@ class Planner:
                 raise IKFailure(f'实测IK夹爪方向需要{required*1000:.0f}mm开度，改试其他方向')
         previous=dict(source);p0,R0=self.pose(source,tcp)
         forward,side,up=horizontal_basis(cfg['up_torso'],yaw)
-        base=np.column_stack([forward,side,up])
-        # Parallel jaws permit a half-turn about the approach axis. Choose the
-        # nearest equivalent orientation, not an unnecessary wrist half-turn.
-        rotations=[base@toolR.T,base@np.diag([1.,-1.,-1.])@toolR.T]
-        desired=min(rotations,key=lambda r:Rotation.from_matrix(R0.T@r).magnitude())
         # Bias redundancy only, never teleport to a different IK seed. Local
         # 8-degree steps and every collision/interpolation check still apply.
         posture=None
@@ -545,7 +567,13 @@ class Planner:
                 'self_collision_checked':True,'table_height_checked':False,
                 'support_required':False,'up_torso':up.tolist(),'geometry_version':2,
                 'joint_limit_policy':self.joint_limit_policy,
-                'orientation_mode':'flexible' if flexible else 'horizontal',
+                'orientation_mode':'pitched' if pitch else 'flexible' if flexible else 'horizontal',
+                'approach_pitch_deg':pitch,'low_object_target_clearance_m':low_clearance,
+                'low_object_grasp_raise_m':height_shift,
+                **({'low_object_gripper_model':'full_urdf_parallel_jaw_sweep',
+                    'low_object_finger_contact_fraction':float(cfg.get('low_object_finger_contact_fraction',.80))} if low_contact else {}),
+                **({'physical_tcp':physical_tcp.tolist(),'grasp_contact_mode':'low_pitched'} if height_shift or low_contact else {}),
+                'low_object_support':product.get('low_object_support'),
                 'approach_yaw_deg':float(cfg['approach_yaw_deg']+yaw_offset),
                 'pregrasp_profile':profile,
                 'withdraw_orientation_mode':'fixed_carry' if carry_metadata else 'adaptive',

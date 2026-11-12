@@ -32,6 +32,20 @@ margin比较当前画面中不同实体，而不是同一物体的两个补录�
     return index,int(scores[index].argmax()),float(best[index])
 
 
+def memory_prompt(cfg,views):
+    """物体记忆检索独立于抓取页的临时文字筛选；补录不改变初始参照。"""
+    from .grounded_sam2 import normalize_prompt
+    # 自定义名字不一定是类别；不能解释的名字仍使用原有广泛候选检索。
+    name=str(views[0][0].get('name','')) if views else ''
+    try:prompt=normalize_prompt(name)
+    except ValueError:prompt=''
+    default=cfg.get('grounded_sam2_prompts',{}).get('all','bottle. cup. box. bag. tissue. trash bin lid. cabinet door.')
+    # 保留通用候选，避免用户自定义英文编号变成唯一检测条件。
+    phrases=(prompt+normalize_prompt(default)).split('.')
+    unique=list(dict.fromkeys(x.strip() for x in phrases if x.strip()))[:16]
+    return normalize_prompt('. '.join(unique))
+
+
 class ObjectAppearanceMemory:
     def __init__(self,perception,cfg):
         self.perception=perception;self.cfg=cfg;self.cache={}
@@ -51,7 +65,7 @@ class ObjectAppearanceMemory:
         reference=self.reference_features(store,ident,views)
         segmenter=getattr(self.perception,'segmenter',None)
         if segmenter is not None:
-            items=segmenter.proposals(frame,'all')
+            items=segmenter.proposals(frame,'all',prompt=memory_prompt(self.cfg,views))
         else:
             items=self.perception._legacy_items(frame,'all')
         if not items:return None

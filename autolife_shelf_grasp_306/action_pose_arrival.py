@@ -46,7 +46,7 @@ class PoseEnvelope:
         return dict(displacement_m=largest, tool_rotation_deg=rotation_max)
 
 
-def settled_arm_arrival(bridge, targets, geometry_check):
+def settled_arm_arrival(bridge, targets, geometry_check, *, timed_grippers=False):
     """Return receipt or None; never skip a frame or change recorded targets."""
     from control_center_joint_control.joint_definitions import GRIPPER_JOINTS, JOINT_LIMITS
     from autolife_handeye_calibration_306.core import ARMS
@@ -72,6 +72,9 @@ def settled_arm_arrival(bridge, targets, geometry_check):
     actual = {}
     residuals = {}
     for name, goal in targets.items():
+        if timed_grippers and name in GRIPPER_JOINTS:
+            # 普通姿态串的夹爪命令时序由调用者单独确认，不影响手臂到位包络。
+            continue
         value = float(bridge._current.get(name, float('nan')))
         command = float(state['commanded_values'].get(name, float('nan')))
         detail = bridge._details.get(name, {})
@@ -101,7 +104,10 @@ def settled_arm_arrival(bridge, targets, geometry_check):
     for name in GRIPPER_JOINTS:
         if name not in targets or name not in state['start_values']:
             return reject()
-        if abs(targets[name] - state['start_values'][name]) > jaw:
+        # 按时序的保持阶段比较“原夹持意图”，不能重新用实际开口残差阻塞身体。
+        start=(bridge.teaching_segments[state['frame_index']]['start'][name]
+               if timed_grippers else state['start_values'][name])
+        if abs(targets[name] - start) > jaw:
             return reject()
         if following and abs(following['joints_deg'][name] - targets[name]) > jaw:
             return reject()

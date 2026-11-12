@@ -1,6 +1,6 @@
 """DM夹爪抓取：按时间输出有界位置目标，避免反馈推进停顿被误判为接触。
 
-仅原厂整段抓取使用。仍通过原厂夹爪话题；不改电流/力矩/驱动响应。
+原厂整段抓取和放置共用。仍通过原厂夹爪话题；不改电流/力矩/驱动响应。
 这里的接触是几何与静止反馈的候选证据，并非力传感器确认。
 """
 from collections import deque
@@ -43,7 +43,12 @@ def execute(node,cfg,arm,state,checked,clock,hold,report,object_width_m):
     rate=240.*speed  # 原厂位置量/秒；50%时120，不是角速度，也不是夹紧力。
     duration=max(.15,1.5*abs(goal-start[jaw])/rate)
     widths,positions,_=load_curve(cfg)
-    evidence=ClosingEvidence(start[jaw],goal,object_width_m*1000,widths,positions)
+    evidence=ClosingEvidence(start[jaw],goal,object_width_m*1000,widths,positions) if closing else None
+    # 放置不等精确位置目标：开口覆盖物品及退出间隙即可衔接收回。
+    release_width=state.get('release_width_mm')
+    target_width=float(np.interp(goal,positions[::-1],widths[::-1]))
+    if release_width is not None and (closing or not math.isfinite(release_width) or not 0<release_width<=target_width):
+        raise ValueError('物品释放所需开口超出夹爪范围，请重新规划')
     stable=None;last_send=-float('inf');last_report=-float('inf');command=start[jaw]
     # 本执行器独占夹爪指令。其他手的夹爪保持本段开始时的实际开度。
     node._active_goals.pop('grippers',None);node.progress_watch.pop('grippers',None)
@@ -59,13 +64,16 @@ def execute(node,cfg,arm,state,checked,clock,hold,report,object_width_m):
             node._last_operator_activity=time.monotonic();last_send=now
         result=None
         if closing:result=evidence.update(now,q[jaw],command)
-        elif abs(command-goal)<1e-6 and abs(q[jaw]-goal)<=state['tolerance']:
+        elif (abs(command-goal)<1e-6 and abs(q[jaw]-goal)<=state['tolerance'] if release_width is None else
+                math.isfinite(q[jaw]) and positions[-1]-state['tolerance']<=q[jaw]<=positions[0] and
+                float(np.interp(q[jaw],positions[::-1],widths[::-1]))>=release_width):
             if stable is None:stable=now
-            if now-stable>=.2:result='at_target'
+            if now-stable>=.2:result='released' if release_width is not None else 'at_target'
         else:stable=None
         if now-last_report>=.2:
             report(dict(targets_deg=targets,commanded_deg=command,measured_deg={n:q[n] for n in targets},
                 nominal_width_mm=float(np.interp(q[jaw],positions[::-1],widths[::-1])),
+                release_width_mm=release_width,
                 closing=closing,time=now,phase='ramping' if abs(command-goal)>1e-6 else 'settling'))
             last_report=now
         if result:

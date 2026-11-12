@@ -21,7 +21,7 @@ class PoseWorkspace(Q.QWidget):
         self.draft_path=self.studio.library.directory/'manual_workspace_draft.json';self.draft_checked=False
         layout=Q.QVBoxLayout(self);layout.setContentsMargins(12,10,12,10)
         title=Q.QLabel('姿态与动作');title.setObjectName('title');layout.addWidget(title)
-        self.notice=Q.QLabel('① 调姿态并保存　→　② 选择姿态组合动作　→　预演或真机运行');self.notice.setWordWrap(True);layout.addWidget(self.notice)
+        self.notice=Q.QLabel('① 调姿态并保存　→　② 选择姿态组合动作　→　预演或真机运行');self.notice.setWordWrap(True);self.notice.setFixedHeight(54);layout.addWidget(self.notice)
         split=Q.QSplitter(C.Qt.Horizontal);split.setChildrenCollapsible(False);layout.addWidget(split,1)
         left=Q.QWidget();self.model_box=Q.QVBoxLayout(left);self.model_box.setContentsMargins(0,0,8,0)
         self.placeholder=Q.QLabel('进入页面后加载本机模型；不会自动使能');self.placeholder.setAlignment(C.Qt.AlignCenter);self.model_box.addWidget(self.placeholder,1)
@@ -44,6 +44,10 @@ class PoseWorkspace(Q.QWidget):
         row=Q.QHBoxLayout();row.addWidget(Q.QLabel('姿态 / 复位速度'));self.manual_speed=self.spin(25,100,5,' %');self.manual_speed.setValue(self.pose_speed());self.manual_speed.setToolTip('已保存姿态与抓取页全身复位共用；25～100%，不改变原厂电机参数');self.manual_speed.valueChanged.connect(self.save_pose_speed);row.addWidget(self.manual_speed);p.addLayout(row)
         library=Q.QGroupBox('姿态库');form=Q.QVBoxLayout(library);p.addWidget(library)
         self.pose_list=Q.QComboBox();self.pose_list.setMinimumContentsLength(12);form.addWidget(self.pose_list)
+        self.pose_use_object=Q.QCheckBox('执行时使用物体参照纠偏')
+        self.pose_use_object.setToolTip('取消勾选：直接执行保存的固定姿态，不拍摄或识别物体；不修改已保存的绑定。')
+        form.addWidget(self.pose_use_object)
+        self.pose_list.currentTextChanged.connect(self.update_pose_binding)
         self.row(form,self.button('预览姿态',self.load_pose),self.button('执行姿态',self.execute_pose),self.button('删除',self.delete_pose))
         self.pose_name=Q.QLineEdit();self.pose_name.setPlaceholderText('姿态名称，如：右手准备位');self.pose_name.setMaxLength(32);form.addWidget(self.pose_name)
         self.save_source=Q.QComboBox();self.save_source.addItem('保存实机姿态＋已执行的夹爪目标',False);self.save_source.addItem('保存蓝色编辑预览',True);form.addWidget(self.save_source)
@@ -69,7 +73,7 @@ class PoseWorkspace(Q.QWidget):
         row=Q.QHBoxLayout()
         for w in widgets:row.addWidget(w)
         layout.addLayout(row)
-    def message(self,text,error=False):self.notice.setText(text);self.notice.setStyleSheet('color:#ff9a8d' if error else 'color:#81d8c3')
+    def message(self,text,error=False):self.notice.setText(text);self.notice.setToolTip(text);self.notice.setStyleSheet('color:#ff9a8d' if error else 'color:#81d8c3')
     def guard(self,fn):
         try:return fn()
         except Exception as exc:self.message(str(exc),True)
@@ -174,6 +178,13 @@ class PoseWorkspace(Q.QWidget):
         for box in (self.pose_list,getattr(self,'available_pose',None)):
             if box is None:continue
             name=box.currentText();box.blockSignals(True);box.clear();box.addItems(sorted(records));box.setCurrentText(name);box.blockSignals(False)
+        self.update_pose_binding()
+    def update_pose_binding(self,*_):
+        name=self.pose_list.currentText();bound=bool(name and self.store.binding(name))
+        if getattr(self,'_binding_selection',None)!=name:
+            self.pose_use_object.setChecked(bound);self._binding_selection=name
+        self.pose_use_object.setEnabled(bound)
+        if not bound:self.pose_use_object.setChecked(False)
     def load_pose(self):
         self.available();name=self.pose_list.currentText()
         if not name:raise ValueError('请先保存姿态')
@@ -239,7 +250,7 @@ class PoseWorkspace(Q.QWidget):
         if not name:raise ValueError('请选择已保存姿态')
         from .pose_execution_profile import pose_record
         record=pose_record(self.store.read()[name],q,self.manual_speed.value(),name);bound=self.store.binding(name)
-        if bound:record['visual_bindings']={'0':bound}
+        if bound and self.pose_use_object.isChecked():record['visual_bindings']={'0':bound}
         self.execute_record(record)
     def execute_record(self,record):
         self.end_preview();(self.owner.run/'stop').unlink(missing_ok=True)
@@ -265,19 +276,28 @@ class PoseWorkspace(Q.QWidget):
         self.row(p,self.button('载入',self.load_action),self.button('新建',self.new_action),self.button('删除动作',self.delete_action))
         self.sequence_name=Q.QLineEdit();self.sequence_name.setMaxLength(32);self.sequence_name.setPlaceholderText('动作串名称，如：拿起并放入篮子');self.sequence_name.textEdited.connect(self.mark_dirty);p.addWidget(self.sequence_name)
         self.available_pose=Q.QComboBox();self.row(p,self.available_pose,self.button('＋ 添加姿态',self.add_pose))
-        self.sequence=Q.QListWidget();self.sequence.setMinimumHeight(150);self.sequence.currentRowChanged.connect(self.select_frame);p.addWidget(self.sequence,1)
+        self.sequence=Q.QListWidget();self.sequence.setMinimumHeight(150);self.sequence.currentRowChanged.connect(self.select_frame);self.sequence.itemChanged.connect(self.row_visual_changed);p.addWidget(self.sequence,1)
+        hint=Q.QLabel('列表勾选＝启用该姿态的物体纠偏；取消后仍保留关联，可随时勾回。');hint.setWordWrap(True);p.addWidget(hint)
         self.row(p,self.button('上移',lambda:self.move_row(-1)),self.button('下移',lambda:self.move_row(1)),self.button('移除',self.remove_row))
+        self.row_hold=self.spin(0,30,.1,' 秒');self.row_hold.setDecimals(1);self.row_hold.valueChanged.connect(self.change_row_hold)
+        self.row(p,Q.QLabel('选中姿态停顿'),self.row_hold,self.button('全部连续通过',self.make_continuous))
         row=Q.QHBoxLayout();row.addWidget(Q.QLabel('整体速度'));self.overall_speed=self.spin(25,100,5,' %');self.overall_speed.setValue(70);self.overall_speed.valueChanged.connect(self.mark_dirty);row.addWidget(self.overall_speed);p.addLayout(row)
         self.row(p,self.button('保存动作串',self.save_action),self.button('▶ 模型预演',self.toggle_preview),self.button('真机运行…',self.run_action))
         self.visual_toggle=self.button('暂停选中姿态纠偏',self.clear_visual)
         self.row(p,self.button('定位参照并预览纠偏',self.preview_visual),self.visual_toggle)
         self.row(p,self.button('查看参照画面',self.visual_panel.show_image))
         self.playback=Q.QLabel('点击列表查看对应姿态。动作串保存后可直接用于任务流程。');self.playback.setWordWrap(True);p.addWidget(self.playback)
-        note=Q.QLabel('按列表顺序执行；关节到位后再夹爪开合。连续录制动作仍在“遥操动作编排器”中编辑，避免破坏原时序。');note.setWordWrap(True);p.addWidget(note)
+        note=Q.QLabel('停顿0秒＝连续通过，新加姿态默认0秒。夹爪需开合的交互点仍先到位再开合；末帧停稳。连续录制动作保留原时序，仍在遥操动作编排器编辑。');note.setWordWrap(True);p.addWidget(note)
     def mark_dirty(self,*_):self.dirty=True;self.end_preview()
     def render_rows(self,index=None):
         row=self.sequence.currentRow() if index is None else index;self.sequence.blockSignals(True);self.sequence.clear()
-        for i,r in enumerate(self.rows):self.sequence.addItem(f'{i+1:02d}　{r["label"]}'+(('　◎ 物体纠偏' if r.get('visual_enabled',True) else '　○ 纠偏已暂停') if r.get('visual_binding') else ''))
+        for i,r in enumerate(self.rows):
+            timing=f'停顿{r["hold_sec"]:g}秒' if r.get('hold_sec',0)>0 else '连续通过'
+            item=Q.QListWidgetItem(f'{i+1:02d}　{r["label"]}　· {timing}'+(('　◎ 物体纠偏' if r.get('visual_enabled',True) else '　○ 纠偏已暂停') if r.get('visual_binding') else '　· 固定姿态'))
+            if r.get('visual_binding'):
+                item.setFlags(item.flags()|C.Qt.ItemIsUserCheckable);item.setCheckState(C.Qt.Checked if r.get('visual_enabled',True) else C.Qt.Unchecked)
+                item.setToolTip('仅切换此动作中这一帧的纠偏；保留原始物体关联，不改变姿态库。')
+            self.sequence.addItem(item)
         self.sequence.setCurrentRow(min(max(0,row),len(self.rows)-1));self.sequence.blockSignals(False);self.select_frame(self.sequence.currentRow())
     def add_pose(self):
         self.available();name=self.pose_list.currentText() if self.tools.currentIndex()==0 else self.available_pose.currentText()
@@ -293,10 +313,29 @@ class PoseWorkspace(Q.QWidget):
         i=self.sequence.currentRow()
         if 0<=i<len(self.rows):self.rows.pop(i);self.mark_dirty();self.render_rows(i)
     def select_frame(self,index):
+        self.row_hold.blockSignals(True);self.row_hold.setEnabled(0<=index<len(self.rows))
+        self.row_hold.setValue(self.rows[index].get('hold_sec',0.) if 0<=index<len(self.rows) else 0.);self.row_hold.blockSignals(False)
         bound=0<=index<len(self.rows) and self.rows[index].get('visual_binding')
         self.visual_toggle.setEnabled(bool(bound))
         self.visual_toggle.setText('恢复选中姿态纠偏' if bound and not self.rows[index].get('visual_enabled',True) else '暂停选中姿态纠偏')
         if 0<=index<len(self.rows):self.playback.setText(f'选中：{self.rows[index]["label"]}；蓝色虚影仅预览，不运动。')
+    def row_visual_changed(self,item):
+        i=self.sequence.row(item)
+        if not 0<=i<len(self.rows) or not self.rows[i].get('visual_binding'):return
+        try:
+            self.available();self.rows[i]['visual_enabled']=item.checkState()==C.Qt.Checked
+            self.mark_dirty();self.render_rows(i)
+        except Exception as exc:self.render_rows(i);self.message(str(exc),True)
+    def change_row_hold(self,value):
+        i=self.sequence.currentRow()
+        if not 0<=i<len(self.rows):return
+        try:
+            self.available();self.rows[i]['hold_sec']=float(value);self.mark_dirty();self.render_rows(i)
+        except Exception as exc:self.select_frame(i);self.message(str(exc),True)
+    def make_continuous(self):
+        self.available()
+        for row in self.rows:row['hold_sec']=0.
+        self.mark_dirty();self.render_rows();self.message('中间姿态已设为连续通过；夹爪交互点仍先到位再开合。保存动作串后，任务调用同样生效。')
     def draft(self):return compose(self.sequence_name.text().strip(),self.rows,self.overall_speed.value())
     def reload_actions(self):
         selected=self.action_list.currentText();records=self.actions.records();self.action_list.clear()
@@ -448,7 +487,7 @@ class PoseWorkspace(Q.QWidget):
         if max(abs(q[n]-v) for n,v in r['source'].items())>1.:raise ValueError('实机姿态已变化，请重新生成镜像预览')
         self.manual(r['joints'],q);self.mirror_result=None;self.mirror_go.setEnabled(False)
     def make_ik(self):
-        page=Q.QWidget();p=Q.QVBoxLayout(page);self.mode.addTab(page,'末端IK')
+        page=Q.QWidget();p=Q.QVBoxLayout(page);p.setAlignment(C.Qt.AlignTop);self.mode.addTab(page,'末端IK')
         self.side=Q.QComboBox();self.side.addItem('右手','right');self.side.addItem('左手','left');self.side.currentIndexChanged.connect(self.mode_changed)
         self.row(p,self.side,self.button('取当前末端',self.capture_ik))
         self.axis_frame=Q.QComboBox();self.axis_frame.addItem('机器人方向（X前 / Y左 / Z上）',False);self.axis_frame.addItem('夹爪自身方向',True);p.addWidget(self.axis_frame)
@@ -461,7 +500,7 @@ class PoseWorkspace(Q.QWidget):
             grid.addWidget(self.button(axis+' ＋',lambda a=i:self.nudge_ik(a,1,False)),1,i)
             grid.addWidget(self.button('绕'+axis+' −',lambda a=i:self.nudge_ik(a,-1,True)),2,i)
             grid.addWidget(self.button('绕'+axis+' ＋',lambda a=i:self.nudge_ik(a,1,True)),3,i)
-        self.ik_text=Q.QLabel('先取当前末端。位置和朝向按钮只计算蓝色虚影；固定腰腿、头部和另一只手。');self.ik_text.setWordWrap(True);p.addWidget(self.ik_text)
+        self.ik_text=Q.QLabel('直接点击XYZ或旋转按钮，自动以当前末端开始预览；固定腰腿、头部和另一只手。');self.ik_text.setWordWrap(True);self.ik_text.setFixedHeight(76);self.ik_text.setAlignment(C.Qt.AlignTop);p.addWidget(self.ik_text)
         p.addWidget(self.button('执行IK预览',self.execute_ik))
     def request_ik(self,operation,source,**extra):
         if self.ik_pending:raise ValueError('正在计算，请稍候')
@@ -475,13 +514,19 @@ class PoseWorkspace(Q.QWidget):
         self.ik_pending=dict(operation=operation,source=deepcopy(source),side=side,started=time.monotonic())
         self.ik_proc.write((json.dumps(request,allow_nan=False)+'\n').encode());self.ik_text.setText('计算中；不发送运动指令…')
     def capture_ik(self):
-        q=self.capture();self.edits={};self.ik_session=None;self.ik_result=None;self.request_ik('capture',q)
+        q=self.capture();self.edits={};self.ik_session=None;self.ik_result=None;self.ik_after_capture=None;self.request_ik('capture',q)
     def nudge_ik(self,axis,sign,rotate):
         from scipy.spatial.transform import Rotation
         self.available()
-        if not self.ik_session:raise ValueError('请先取当前末端')
-        q=self.capture();source=self.ik_session['source']
-        if max(abs(q[n]-v) for n,v in source.items())>1.:raise ValueError('实机已移动，请重新取当前末端')
+        if self.ik_pending:raise ValueError('正在计算，请稍候')
+        from .pose_workspace_motion import source_changed
+        q=self.capture()
+        if not self.ik_session or source_changed(q,self.ik_session['source']):
+            # 只自动刷新预览参考，不自动执行；原点击在FK返回后应用一次。
+            self.edits={};self.ik_session=None;self.ik_result=None
+            self.ik_after_capture=(axis,sign,rotate)
+            self.request_ik('capture',q);return
+        source=self.ik_session['source']
         target=np.array((self.ik_result or self.ik_session)['target'],float);local=self.axis_frame.currentData()
         direction=np.eye(3)[axis]
         if rotate:
@@ -517,21 +562,26 @@ class PoseWorkspace(Q.QWidget):
                 self.ik_text.setText(f'基座系末端：X {xyz[0]:.1f} / Y {xyz[1]:.1f} / Z {xyz[2]:.1f} mm\n'+('已取当前末端；可调位置与朝向。' if pending['operation']=='capture' else f'可达：位置误差 {r["position_error_mm"]:.2f} mm，朝向误差 {r["angle_error_deg"]:.2f}°'))
                 notes=r.get('fixed_collision_notes',[])
                 if notes:self.ik_text.setText(self.ik_text.text()+'\n固定部件模型提示（本次不运动）：'+'；'.join(notes))
+                self.ik_text.setToolTip(self.ik_text.text())
+                if pending['operation']=='capture' and getattr(self,'ik_after_capture',None):
+                    click=self.ik_after_capture;self.ik_after_capture=None
+                    self.nudge_ik(*click)
             except Exception as exc:
-                self.ik_result=None;self.mirror_result=None;self.mirror_go.setEnabled(False)
+                self.ik_after_capture=None;self.ik_result=None;self.mirror_result=None;self.mirror_go.setEnabled(False)
                 self.ik_text.setText(str(exc));self.mirror_text.setText(str(exc));self.message(str(exc),True)
     def execute_ik(self):
         q=self.capture();r=self.ik_result
         if not r:raise ValueError('请先计算出可达的IK预览')
-        if max(abs(q[n]-v) for n,v in r['source'].items())>1.:raise ValueError('实机姿态已变化，请重新取当前末端')
+        from .pose_workspace_motion import source_changed
+        if source_changed(q,r['source']):raise ValueError('实机姿态已变化，请点击方向键重新生成预览')
         self.manual(r['joints'],q)
     def ik_error(self,*_):
         if self.ik_pending:self.message('IK计算进程启动或通信失败，未发送动作',True)
-        self.ik_pending=None
+        self.ik_pending=None;self.ik_after_capture=None
     def ik_finished(self,*_):
         if self.ik_pending:self.ik_error()
         if self.ik_proc:self.ik_proc.deleteLater();self.ik_proc=None
     def cancel_ik(self):
-        p=self.ik_proc;self.ik_proc=None;self.ik_pending=None;self.ik_buffer=b''
+        p=self.ik_proc;self.ik_proc=None;self.ik_pending=None;self.ik_after_capture=None;self.ik_buffer=b''
         if p:
             p.blockSignals(True);p.kill();p.waitForFinished(500);p.deleteLater()

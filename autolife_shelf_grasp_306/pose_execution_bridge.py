@@ -65,6 +65,8 @@ def make_bridge(base,context):
             state=inner._action_state
             if not state or not inner.teaching_segments:return False
             i=state['frame_index'];frames=state['record']['keyframes']
+            if 'continuous_boundary' in inner.teaching_segments[i]:
+                return i<len(frames)-1 and frames[i]['hold_sec']==0 and inner.teaching_segments[i]['continuous_boundary']
             return i<len(frames)-1 and frames[i]['hold_sec']==0 and any(
                 abs(v)>1e-8 for v in inner.teaching_segments[i]['v1'].values())
 
@@ -103,6 +105,8 @@ def make_bridge(base,context):
                     targets=state.get('replay_desired',frame['joints_deg']),measured=dict(inner._current),
                     segment_end_targets=frame['joints_deg'],recorded_elapsed=state.get('recorded_elapsed'),
                     commanded=dict(state['commanded_values']),details=dict(inner._details),
+                    start_values=dict(state['start_values']),progress=state.get('progress'),
+                    opening_arrival=state.get('opening_arrival'),
                     feedback_age_sec=time.monotonic()-inner._feedback_monotonic)
                 from .core import atomic_json
                 with (context.owner.run/'action_events.jsonl').open('a',encoding='utf-8') as stream:
@@ -111,12 +115,19 @@ def make_bridge(base,context):
             except (OSError,ValueError,KeyError,TypeError,AttributeError):pass
         def _action_target_reached(inner,targets):
             state=inner._action_state
-            if state and inner.teaching_segments and not inner.teaching_segments[state['frame_index']].get('recorded_timing'):
-                from .pose_gripper_intent import stable_closing
+            from control_center_joint_control.joint_definitions import GRIPPER_JOINTS
+            segment=inner.teaching_segments[state['frame_index']] if state and inner.teaching_segments else {}
+            timed=bool(segment.get('gripper_command_timing'))
+            body_targets={n:v for n,v in targets.items() if n not in GRIPPER_JOINTS} if timed else targets
+            if timed:
+                from .pose_jaw_timing import issued
+                if not issued(inner,state,segment,targets):return False
+            elif state and inner.teaching_segments and not segment.get('recorded_timing'):
+                from .pose_gripper_intent import stable_closing,stable_held_grippers
+                if segment.get('hold_grippers') and stable_held_grippers(inner,state,targets):return True
                 if stable_closing(inner,state,targets,state['commanded_values'],state['start_values']):
-                    from control_center_joint_control.joint_definitions import GRIPPER_JOINTS
                     context.gripper_targets={n:state['commanded_values'][n] for n in GRIPPER_JOINTS}
-                    inner._event('闭合目标已发送并稳定保持；物体限制开口不继续等待，不代表已验证抓牢')
+                    inner._event('闭合目标已发送并稳定保持；不代表已验证抓牢')
                     return True
             if inner._through_point():
                 # No settle or dwell at a through point. Retain bounded
@@ -126,8 +137,8 @@ def make_bridge(base,context):
                 lead=max(.1,float(inner.get_parameter('max_single_step_deg').value))
                 return all(abs(state['commanded_values'][n]-v)<=.25 and
                     abs(inner._current[n]-v)<=(5. if n in GRIPPER_JOINTS else lead+.25)
-                    for n,v in targets.items())
-            if super()._action_target_reached(targets):
+                    for n,v in body_targets.items())
+            if super()._action_target_reached(body_targets):
                 from .action_arrival import remember_opening_arrival
                 remember_opening_arrival(inner,targets)
                 if inner._action_state:
@@ -135,13 +146,13 @@ def make_bridge(base,context):
                     inner._action_state.pop('arm_arrival',None)
                 return True
             from .action_arrival import settled_opening_arrival,settled_full_open_arrival
-            if settled_full_open_arrival(inner,targets):
+            if not timed and settled_full_open_arrival(inner,targets):
                 inner._record_action_event('settled_full_open','开口端目标已下发；目标与反馈均在全开端区域内，残差≤5编码单位并稳定0.5秒；其他关节容差不变')
                 inner._event('夹爪全开端已稳定，继续下一阶段')
                 return True
-            if settled_opening_arrival(inner,targets):
-                inner._record_action_event('settled_opening','松开或保持已确认松开状态，夹爪残差≤5°并稳定0.5秒')
-                inner._event('松爪/保持松开已稳定，小于5°残差继续下一帧；身体与手臂容差不变')
+            if not timed and settled_opening_arrival(inner,targets):
+                inner._record_action_event('settled_opening','张开目标已发送；开口误差≤5编码单位，连续位置稳定0.5秒；不据此判定物体已释放')
+                inner._event('夹爪开度已进入容差并停稳，继续下一帧；身体与手臂容差不变')
                 return True
             from .action_pose_arrival import settled_arm_arrival,PoseEnvelope
             def geometry(actual,target):
@@ -150,7 +161,7 @@ def make_bridge(base,context):
                     cfg=yaml.safe_load((context.owner.root/'config/grasp.yaml').read_text('utf-8'))
                     inner._arrival_envelope=PoseEnvelope(cfg['urdf_path'])
                 return inner._arrival_envelope.check(actual,target)
-            receipt=settled_arm_arrival(inner,targets,geometry)
+            receipt=settled_arm_arrival(inner,targets,geometry,timed_grippers=timed)
             if receipt is None:return False
             # Only already stationary arms are held at their measured
             # position. Do not change jaws, waist/legs, neck or records.
@@ -207,6 +218,12 @@ def make_bridge(base,context):
                 # point, rather than restarting a rest-to-rest move.
                 next_state['start_values']=dict(frames[index]['joints_deg'])
                 next_state['commanded_values']=old_commands
+                if 'synchronized_clock' in state and not inner.teaching_segments[index].get('recorded_timing') and 'curve' not in inner.teaching_segments[index]:
+                    # 普通姿态按反馈共同推进，不能拿原墙钟强行追赶。
+                    # 显式交接时钟，下一周期直接沿下一曲线前进，不再多停一周期。
+                    next_state['synchronized_clock']=dict(key=(next_state['loop_index'],next_state['frame_index']),progress=0.,last=now)
+                    next_state['frame_started']=now
+                    return
                 if now-old_end<.08:next_state['frame_started']=old_end
                 else:
                     inner._cancel_action('通过点跟随滞后，已停止；请降低动作速度后重试')
@@ -224,6 +241,11 @@ def make_bridge(base,context):
             if inner._action_state: inner.outcome = (inner._action_state['name'], False, reason)
             super()._cancel_action(reason)
         def _lock(inner, reason):
+            if '通信离线' in str(reason):
+                from control_center_joint_control.joint_definitions import ALL_JOINTS
+                lost=inner._communication_lost_joints(ALL_JOINTS)
+                if lost:reason=str(reason)+'：'+'、'.join(lost)
+            inner.last_lock_reason=str(reason)
             inner._record_action_event('locked',reason)
             if inner._action_state: inner.outcome = (inner._action_state['name'], False, reason)
             super()._lock(reason)

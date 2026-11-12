@@ -18,13 +18,53 @@ def _outline(arrays):
     y,x=np.nonzero(mask)
     if len(x)<100:raise ValueError('请框选完整物体，当前轮廓太小')
     h,w=mask.shape
-    if x.min()<2 or y.min()<2 or x.max()>w-3 or y.max()>h-3:
-        raise ValueError('物体已超出画面，请让完整物体进入画面')
     lo=np.array([x.min(),y.min()]);hi=np.array([x.max(),y.max()])
     if np.min(hi-lo)<8:raise ValueError('物体轮廓太窄，请靠近观察')
     crop=mask[lo[1]:hi[1]+1,lo[0]:hi[0]+1].astype(np.uint8)
     shape=cv2.resize(crop,(64,96),interpolation=cv2.INTER_NEAREST)>0
     return mask,lo,hi,shape
+
+
+def _edge_flags(outline):
+    mask,lo,hi,_=outline[:4]
+    h,w=mask.shape
+    # 贴边一像素并不意味着物体已不可识别。
+    return lo<=1,hi>=np.array([w-2,h-2])
+
+
+def _partial_outline(reference,current,oa,ob,cfg):
+    """轻微裁边时用完整参考的投影尺寸恢复采样坐标，不给缺失区域伪造深度。
+
+    原归一化包围框会把裁短后的物体拉伸，产生半个缺口大小的位置偏差。
+    使用深度与相机内参推算尺寸，只在仍可见的另一端锚定；采样仍仅取真实像素。
+    """
+    left,right=_edge_flags(ob)
+    if not (left.any() or right.any()):return ob,False
+    if any(x.any() for x in _edge_flags(oa)):
+        raise ValueError('参考物体已超出画面，缺少完整尺寸；请补录一个完整参考视角')
+    if np.any(left&right):raise ValueError('物体超出画面较多，请稍微后退让物体完整些')
+    def depth_of(arr,mask):
+        d=np.asarray(arr['depth'],float)*float(cfg['depth_scale_m'])
+        low,high=cfg['depth_range_m'];v=d[mask&np.isfinite(d)&(d>=low)&(d<=high)]
+        if len(v)<100:raise ValueError('物体轻微裁边，但有效深度不足，请调整视角')
+        return float(np.median(v))
+    za=depth_of(reference,oa[0]);zb=depth_of(current,ob[0])
+    scale=np.diag(current['K'])[:2]/np.diag(reference['K'])[:2]*za/zb
+    expected=(oa[2]-oa[1])*scale
+    lo=ob[1].astype(float).copy();hi=ob[2].astype(float).copy()
+    measured=hi-lo
+    # 最多容忍各方向完整尺寸的8%，且最多12像素；不是取消所有裁边判断。
+    for axis in (0,1):
+        gap=expected[axis]-measured[axis]
+        if left[axis] or right[axis]:
+            if gap < -max(2.,expected[axis]*.04) or gap>min(12.,expected[axis]*.08)+1e-6:
+                raise ValueError('物体超出画面较多或尺寸不一致，请稍微调整取景')
+            if gap>0:
+                if left[axis]:lo[axis]-=gap
+                else:hi[axis]+=gap
+        elif abs(gap)>max(2.,expected[axis]*.08):
+            raise ValueError('裁边物体与参考轮廓尺寸不一致，请调整观察方向')
+    return (ob[0],lo,hi,ob[3]),True
 
 
 def _oriented_outline(arrays):
@@ -68,8 +108,13 @@ def _estimate(reference,reference_camera,current,current_camera,cfg,oriented=Fal
     cosine=np.clip((np.trace(aT[:3,:3].T@bT[:3,:3])-1)/2,-1,1)
     if np.degrees(np.arccos(cosine))>12:
         raise ValueError('物体已认出，但观察方向变化较大；请从接近初始观察方向预览位置纠偏')
-    layout=_oriented_outline if oriented else _outline
-    oa=layout(reference);ob=layout(current)
+    oa=_outline(reference);ob=_outline(current)
+    ob,partial=_partial_outline(reference,current,oa,ob,cfg)
+    if not partial and any(x.any() for x in _edge_flags(oa)):
+        raise ValueError('参考物体已超出画面，请补录完整参考视角')
+    if oriented:
+        if partial:raise ValueError('轻微裁边使用原始投影方向，不从残缺轮廓推测旋转')
+        oa=_oriented_outline(reference);ob=_oriented_outline(current)
     sa,sb=oa[3],ob[3];iou=float(np.sum(sa&sb)/max(1,np.sum(sa|sb)))
     aspect=(oa[2]-oa[1])[0]/(oa[2]-oa[1])[1]/((ob[2]-ob[1])[0]/(ob[2]-ob[1])[1])
     # 二维形状仅作诊断评分；是否可纠偏由分布式深度对应和三维重叠决定。
@@ -98,7 +143,7 @@ def _estimate(reference,reference_camera,current,current_camera,cfg,oriented=Fal
     delta=np.eye(4);delta[:3,3]=shift
     return delta,dict(method='shape_position',method_label='方向对齐＋深度位置纠偏' if oriented else '整体轮廓＋深度位置纠偏',
         silhouette_alignment='principal_axes' if oriented else 'image_axes',
-        orientation_observed=False,angle_resolution_deg=180.,
+        orientation_observed=False,angle_resolution_deg=180.,partial_outline=partial,
         position_resolution_mm=max(2.,2*rms*1000),rms_mm=rms*1000,
         inliers=int(good.sum()),matches=len(diff),silhouette_overlap=iou,silhouette_aspect_ratio=float(aspect),
         pixels=pixels[good].tolist())

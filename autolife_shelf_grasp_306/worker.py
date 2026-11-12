@@ -183,6 +183,7 @@ def main():
                             plan=None;scene=None;items=[];selected=None
                             # 抓取规划器可能携带另一手的几何快照；复位独立使用本次设置。
                             planner=Planner(cfg)
+                            atomic_json(run/'reset_input.json',dict(source_q=q,config=cfg,request_id=ident))
                             result=checked_reset_plan(planner,cfg,q)
                             result['static_neck_overlap']=list(getattr(planner.guard,'static_neck_pairs',[]))
                             atomic_json(root/'data/last_reset_plan.json',result)
@@ -192,7 +193,9 @@ def main():
                         plan=None;scene=None;items=[];selected=None
                         # 不复用自动选手返回的规划器，防止旧臂形和旧速度混入复位。
                         planner=Planner(cfg)
-                        result=checked_reset_plan(planner,cfg,robot.sample(stationary=True),
+                        q=robot.sample(stationary=True)
+                        atomic_json(run/'reset_input.json',dict(source_q=q,config=cfg,request_id=ident))
+                        result=checked_reset_plan(planner,cfg,q,
                             operator_supported=cmd.get('operator_supported_neck_recovery') is True)
                         result['static_neck_overlap']=list(getattr(planner.guard,'static_neck_pairs',[]))
                         atomic_json(root/'data/last_reset_plan.json',result)
@@ -558,7 +561,8 @@ def main():
                         arm_observations={}
                         def observation_for_arm(side,side_cfg):
                             data,digest=profiles.resolve(side_cfg)
-                            if digest==calibration_sha:
+                            from .grasp_geometry import same_nominal_camera
+                            if digest==calibration_sha or same_nominal_camera(data,calibration):
                                 value=(fused[0],copy.deepcopy(geometry),copy.deepcopy(selected['product']),T)
                             else:
                                 estimates=[];rejected=[];last_T=None
@@ -579,7 +583,10 @@ def main():
                                 if temporary:stats.update(temporary=True,dimension_source=product['dimension_source'])
                                 value=(position,stats,product,last_T)
                             arm_observations[side]=value
-                            return value[0],planning_product(value[2],value[1])
+                            obj=planning_product(value[2],value[1])
+                            from .low_object_grasp import enabled,observe_support
+                            if enabled(obj,side_cfg):obj=observe_support(frame,mask,value[3],obj,value[0],up,side_cfg)
+                            return value[0],obj
                         atomic_json(run/'grasp_input.json',dict(source_q=q,
                             center=center.tolist(),product=planned_product,config={**arm_pool.base,'target_offsets_by_arm_torso_mm':cfg['target_offsets_by_arm_torso_mm']},
                             up_torso=up.tolist(),geometry=geometry,request_id=ident,center_uncorrected=True))
@@ -590,7 +597,7 @@ def main():
                             cfg.update(selected_cfg)
                             calibration,calibration_sha=profiles.resolve(cfg)
                             _,geometry,selected['product'],T=arm_observations[cfg['arm']]
-                            planned_product=planning_product(selected['product'],geometry)
+                            planned_product=plan['product']
                             if cfg.get('calibration_profile',{}).get('test_only'):
                                 emit('status',text='右臂使用本次测试标定（待实物精度验证）')
                         except ValueError as exc:raise CandidateUnavailable(str(exc)) from exc
@@ -626,7 +633,7 @@ def main():
                         atomic_json(run/filename,plan)
                         atomic_json(root/'data/last_plan.json',plan)
                         points=np.array([segment['tcp_goal'] for segment in plan['segments']])
-                        if plan.get('grasp_contact_mode')=='front_local':
+                        if 'physical_tcp' in plan:
                             points=np.array([planner.pose(segment['waypoints'][-1],plan['physical_tcp'])[0] for segment in plan['segments']])
                         inv=np.linalg.inv(T);camera_points=points@inv[:3,:3].T+inv[:3,3]
                         if np.any(camera_points[:,2]<=0):pixels=[]
@@ -643,6 +650,8 @@ def main():
                              estimated_dimensions_mm=([selected['product'][k]*1000 for k in ('diameter_m','height_m','depth_m')] if temporary else None),
                              orientation_mode=plan['orientation_mode'],orientation_deviation=plan['max_grasp_orientation_deviation_deg'],
                              approach_yaw_deg=plan['approach_yaw_deg'],
+                             approach_pitch_deg=plan.get('approach_pitch_deg',0.),
+                             low_object_grasp_raise_m=plan.get('low_object_grasp_raise_m',0.),
                              grasp_contact_mode=plan.get('grasp_contact_mode','center'),
                              partial_view=bool(geometry.get('image_cropped')),
                              placement_bottom_observed=bool(selected['product'].get('placement_bottom_observed')),

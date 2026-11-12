@@ -51,6 +51,32 @@ def test_bad_camera_direction_or_offscreen_cannot_fake_translation():
     with pytest.raises(ValueError,match='超出画面'):position_from_shape(a,np.eye(4),a,np.eye(4),CFG)
 
 
+def clipped_scene(dx,dy):
+    # 裁切真正平移后的物体，不使用 Python 负下标回绕。
+    b=scene();b['mask'][:]=False
+    b['mask'][max(0,60+dy):min(240,180+dy),max(0,130+dx):min(320,190+dx)]=True
+    b['depth'][:]=900.;b['depth'][b['mask']]=600.
+    return b
+
+
+@pytest.mark.parametrize('dx,dy',[(-132,0),(132,0),(0,-65),(0,65),(-132,-65),(-130,0)])
+def test_small_clipping_uses_complete_extent_and_unbiased_translation(dx,dy):
+    d,s=position_from_shape(scene(),np.eye(4),clipped_scene(dx,dy),np.eye(4),CFG)
+    assert np.allclose(d[:3,3],[dx*.6/400,dy*.6/400,0],atol=.0001)
+    assert s['partial_outline'] and s['inliers']>=40
+
+
+@pytest.mark.parametrize('dx,dy',[(-150,0),(0,-90)])
+def test_large_clipping_still_needs_more_visibility(dx,dy):
+    with pytest.raises(ValueError,match='超出画面'):
+        position_from_shape(scene(),np.eye(4),clipped_scene(dx,dy),np.eye(4),CFG)
+
+
+def test_clipping_does_not_accept_wrong_background_depth():
+    b=clipped_scene(-132,0);b['depth'][b['mask']]=1200
+    with pytest.raises(ValueError):position_from_shape(scene(),np.eye(4),b,np.eye(4),CFG)
+
+
 def test_appearance_supplement_can_win_over_weak_original(monkeypatch):
     from autolife_shelf_grasp_306.visual_multiview import seed_match
     a=(dict(metric_registered=True),{'tag':'old'})

@@ -31,6 +31,8 @@ class VendorPlacePlanner(VendorGraspPlanner):
             source_torso_to_base=self.anchor.tolist(),
             waist_bounds_deg={n:list(np.rad2deg(self.bounds[:,i])) for i,n in enumerate(BODY[2:])})
         self.context.set_stage('放置整段定时与模型复核',arm=self.cfg['arm'])
+        # 复用抓取时已核对的开口几何与10mm退出间隙，不要求精确全开。
+        plan['release_opening_m']=min(float(self.cfg['gripper_max_width_m']),float(grasp['grasp_width_m'])+.010)
         plan['vendor_blocks']=build_blocks(plan,self.cfg)
         product=plan['product'];up=np.asarray(self.cfg['up_torso']);tcp=np.asarray(tcp)
         reference=self.placement_grasp_rotation(grasp)

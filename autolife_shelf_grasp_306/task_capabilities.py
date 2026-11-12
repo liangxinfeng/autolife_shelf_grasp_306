@@ -16,5 +16,12 @@ def require_perception(owner, record):
     raise ValueError(f'{steps}需要视觉能力：{reason}。预录制动作、航点导航可独立使用。')
 
 
+def starts_with_grasp(record):
+    """新任务首个操作是抓取时，从空手开始；放置/动作优先则保留持物来源。"""
+    for row in (record or {}).get('steps',[]):
+        if row['kind'] in ('grasp','place','action'):return row['kind']=='grasp'
+    return False
+
+
 def needs_grasp_preparation(record):
     return any(row['kind'] == 'grasp' for row in (record or {}).get('steps', []))

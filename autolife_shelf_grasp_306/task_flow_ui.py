@@ -6,7 +6,7 @@ from PyQt5 import QtCore as C, QtWidgets as Q
 from .task_flow import Cursor, KINDS, validate, select_candidates
 from .core import atomic_json
 from .task_pause import defer_call
-from .task_capabilities import uses_perception, require_perception
+from .task_capabilities import uses_perception, require_perception, starts_with_grasp
 
 
 class FlowDialog(Q.QDialog):
@@ -217,11 +217,12 @@ class Workflow(C.QObject):
                         or data.get('map_fault') or data.get('active_map')!=self.map or row['target'] not in data.get('names',[])):
                     raise ValueError('请先恢复原地图的导航与定位，再重试该航点')
             if kind=='grasp':
-                if (o.run/'held_object.json').exists():raise ValueError('仍有持物记录，请先确认并处理手中物品，不能重复抓取或张爪复位')
+                # 手动取走物品后允许明确重试，不让上次抓取文件永久锁住步骤。
                 path=o.run/'prepare_result.json'
                 prepared=json.loads(path.read_text('utf-8')) if path.exists() else {}
                 scan_only=self.failed_phase in ('scan','plan','confirm') and prepared.get('status')=='prepared'
                 detail=('重新识别并规划；'+('规划通过即自动抓取' if o.auto_grasp.isChecked() else '等待您确认抓取')+'，不重复复位。') if scan_only else '将重新复位并张开夹爪，再识别规划；请先确认双夹爪空载，未夹住物品。'
+                detail+=' 请确认双爪已空载；确认后清理旧持物记录。'
             elif kind=='place':
                 from .placement_request import held_grasp
                 held_grasp(o.run)
@@ -232,6 +233,9 @@ class Workflow(C.QObject):
             if Q.QMessageBox.question(o,'重试当前步骤',
                     f'第{self.cursor.index+1}步 · {KINDS[kind]} · {row["target"]}\n{detail}\n请清空运动范围并准备实体急停，是否重试？',
                     defaultButton=Q.QMessageBox.No)!=Q.QMessageBox.Yes:return
+            if kind=='grasp':
+                from .task_pause import archive_held
+                archive_held(o.run)
             o.studio.release();o.invalidate_plan();self.plan_id=None;self.posture_resume=None
             self.cursor.retry();self.failed_phase=''
             atomic_json(o.run/'task_flow.json',dict(run_id=self.cursor.run_id,map=self.map,record=self.cursor.record,
@@ -276,7 +280,12 @@ class Workflow(C.QObject):
         from .base_sequence import summary
         text+=''.join('\n底盘：'+summary(r['base']) for r in record['steps'] if r['kind']=='base')
         grasp_mode='已勾选自动执行抓取，规划通过后立即抓取，无需逐次确认。' if o.auto_grasp.isChecked() else '抓取先预览再确认。'
-        if not confirmed and Q.QMessageBox.question(o, '确认任务流程', text+'\n\n将自动执行导航、放置和示教动作（包括腰腿与夹爪）。每次抓取前会复位并张开夹爪，请确认此时夹爪空载；'+grasp_mode+'\n示教动作没有门阻力检测，请确认现场与示教时一致、全程看护并准备实体急停。', defaultButton=Q.QMessageBox.No) != Q.QMessageBox.Yes: return
+        entry=('新任务将从抓取开始，请确认双爪空载；确认后清理上次独立测试的持物记录。' if starts_with_grasp(record) else '将按编排执行，保留现有持物信息供放置或动作使用。')
+        if not confirmed and Q.QMessageBox.question(o, '确认任务流程', text+'\n\n将自动执行导航、放置和示教动作（包括腰腿与夹爪）。'+entry+grasp_mode+'\n示教动作没有门阻力检测，请确认现场与示教时一致、全程看护并准备实体急停。', defaultButton=Q.QMessageBox.No) != Q.QMessageBox.Yes: return
+        # 与自动任务入口一致：已确认空载的新任务不继承独立抓取测试的状态。
+        if starts_with_grasp(record):
+            from .task_pause import archive_held
+            archive_held(o.run)
         o.studio.release(); o.demo.setChecked(False); self.cursor = Cursor(record); self.map = data.get('active_map');self.failed_phase=''
         (o.run/'stop').unlink(missing_ok=True)
         atomic_json(o.run/'task_flow.json', dict(run_id=self.cursor.run_id, map=self.map,
@@ -292,7 +301,7 @@ class Workflow(C.QObject):
         o.flow_label.setText(f'任务 {self.cursor.index+1}/{len(self.cursor.record["steps"])} · {KINDS[row["kind"]]} · {row["target"]}')
         try:
             require_perception(o, {'steps':[row]})
-            o.studio.release()
+            if row['kind'] in ('base','grasp','place'):o.studio.release()
             if row['kind']=='base':
                 if not row['base']['enabled']:self.advance();return
                 self.adjust_posture(self.start_base)
@@ -341,13 +350,14 @@ class Workflow(C.QObject):
         self.posture_resume=resume
         if self.phase!='navigate':self.phase='posture'
         self.owner.flow_label.setText('任务调姿中 · 保持手臂与夹爪；导航步骤会同时行驶')
-        self.owner.studio.adjust_posture(self.cursor.token+':posture',self.cursor.step['posture'])
+        self.owner.studio.adjust_posture(self.cursor.token+':posture',self.cursor.step['posture'],
+            keep_session=self.cursor.step['kind'] in ('navigate','action'))
         self.owner.controls()
 
     def start_fixed_action(self):
         if getattr(self.owner,'automatic',None) and defer_call(self.owner,self.start_fixed_action):return
         self.phase='action';self.owner.studio.execute(self.cursor.token,deepcopy(self.actions[self.cursor.step['target']]),
-            preserve_grippers_at_entry=self.action_hold_grippers)
+            preserve_grippers_at_entry=self.action_hold_grippers,keep_session=True)
 
     def start_base(self):
         if getattr(self.owner,'automatic',None) and defer_call(self.owner,self.start_base):return
@@ -406,6 +416,9 @@ class Workflow(C.QObject):
     def advance(self):
         if getattr(self.owner,'automatic',None) and defer_call(self.owner,self.advance):return
         if not self.active: return
+        if self.cursor.index==len(self.cursor.record['steps'])-1:
+            try:self.owner.studio.release()
+            except Exception as exc:self.fail('结束控制交接：'+str(exc));return
         self.cursor.complete(self.cursor.token)
         if self.active: C.QTimer.singleShot(0, self.next)
         else:

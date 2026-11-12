@@ -59,7 +59,7 @@ def test_executor_preserves_order_and_all_three_checks():
     text=path.read_text(encoding='utf-8');ast.parse(text)
     assert text.index("check_start_pose('执行前')")<text.index('response=node.unlock()')
     assert text.index("check_start_pose('使能期间')")<text.index('session.enter(spin)')
-    assert text.index('session.enter(spin)')<text.index("check_start_pose('SYNC切换期间')")<text.index('def checked():')
+    assert text.index('session.enter(spin)')<text.rindex("check_start_pose('SYNC切换期间')")<text.index('def checked():')
 
 
 def test_diagnostics_are_serializable():
